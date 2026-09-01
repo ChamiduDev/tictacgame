@@ -1,7 +1,7 @@
 // app/room/[id]/page.js
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, Suspense } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { onValue, update } from "firebase/database";
@@ -114,7 +114,7 @@ function TurnBanner({ isMyTurn, mySymbol, currentTurn }) {
   );
 }
 
-export default function RoomPage() {
+function RoomContent() {
   const { id: roomId } = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -129,6 +129,14 @@ export default function RoomPage() {
   const [incomingEmoji, setIncomingEmoji] = useState(null);
 
   const lastEmojiTimestamp = useRef(0);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!roomId) return;
@@ -137,12 +145,18 @@ export default function RoomPage() {
     const unsubscribe = onValue(
       ref,
       (snapshot) => {
+        if (!isMountedRef.current) return;
         if (!snapshot.exists()) {
           setError("Room not found or has expired.");
           setLoading(false);
           return;
         }
         const data = snapshot.val();
+
+        if (data.gameType === "rps") {
+          router.replace(`/rps/${roomId}${symbolParam ? `?player=${symbolParam === "X" ? "P1" : "P2"}` : ""}`);
+          return;
+        }
 
         if (data.emoji?.timestamp && data.emoji.timestamp !== lastEmojiTimestamp.current) {
           lastEmojiTimestamp.current = data.emoji.timestamp;
@@ -153,17 +167,20 @@ export default function RoomPage() {
         setLoading(false);
 
         if (data.status === "finished" && data.winner) {
-          setTimeout(() => setShowModal(true), 500);
+          setTimeout(() => {
+            if (isMountedRef.current) setShowModal(true);
+          }, 500);
         }
       },
       () => {
+        if (!isMountedRef.current) return;
         setError("Network error connecting to room.");
         setLoading(false);
       }
     );
 
     return () => unsubscribe();
-  }, [roomId]);
+  }, [roomId, symbolParam, router]);
 
   useEffect(() => {
     if (!roomId || !mySymbol) return;
@@ -179,7 +196,7 @@ export default function RoomPage() {
   const handleCellClick = useCallback(
     async (index) => {
       if (!gameState) return;
-      const { board, currentTurn, gridSize, winStreak, status } = gameState;
+      const { board = [], currentTurn, gridSize, winStreak, status } = gameState;
 
       if (status !== "playing" || currentTurn !== mySymbol || board[index] !== "") return;
 
@@ -226,7 +243,7 @@ export default function RoomPage() {
     setShowModal(false);
     try {
       await update(roomRef(roomId), {
-        board: createEmptyBoard(gameState.gridSize),
+        board: createEmptyBoard(gameState.gridSize || 3),
         currentTurn: "X",
         status: "playing",
         winner: null,
@@ -249,7 +266,7 @@ export default function RoomPage() {
   if (error) return <ErrorScreen message={error} onHome={() => router.push("/")} />;
   if (!gameState) return <LoadingScreen message="LOADING MATCH DATA…" />;
 
-  const { board, gridSize, winStreak, currentTurn, players, status, winner, winningCells } = gameState;
+  const { board = [], gridSize = 3, winStreak = 3, currentTurn, players, status, winner, winningCells = [] } = gameState;
 
   if (status === "waiting" && mySymbol === "X") {
     return <WaitingScreen roomId={roomId} />;
@@ -332,3 +349,10 @@ export default function RoomPage() {
   );
 }
 
+export default function RoomPage() {
+  return (
+    <Suspense fallback={<LoadingScreen message="CONNECTING TO ROOM…" />}>
+      <RoomContent />
+    </Suspense>
+  );
+}

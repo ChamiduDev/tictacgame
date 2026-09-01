@@ -14,9 +14,9 @@ const SYMBOL_SHADOWS = {
 };
 
 export default function GameBoard({
-  board,
-  gridSize,
-  winningCells,
+  board = [],
+  gridSize = 3,
+  winningCells = [],
   currentTurn,
   mySymbol,
   gameStatus,
@@ -50,7 +50,7 @@ export default function GameBoard({
         }}
       >
         <AnimatePresence>
-          {board.map((cell, index) => {
+          {(board || []).map((cell, index) => {
             const isWinning = winningCells.includes(index);
             const row = Math.floor(index / gridSize);
             const col = index % gridSize;
