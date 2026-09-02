@@ -1,4 +1,4 @@
-// app/room/[id]/page.js
+// app/kqbattle/[id]/page.js
 "use client";
 
 import { useState, useEffect, useRef, useCallback, Suspense } from "react";
@@ -6,20 +6,20 @@ import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { onValue, update } from "firebase/database";
 import { roomRef, roomPath } from "@/lib/firebase";
-import { checkWinner, createEmptyBoard } from "@/hooks/useGameLogic";
-import GameBoard from "@/components/GameBoard";
-import EmojiPanel from "@/components/EmojiPanel";
+import { checkKQWinner, generateRandomPlacement, TARGET_SCORE } from "@/lib/kqLogic";
+import KQBoard from "@/components/KQBoard";
+import KQPlayerStatus from "@/components/KQPlayerStatus";
 import RoomCode from "@/components/RoomCode";
+import EmojiPanel from "@/components/EmojiPanel";
 import GameOverModal from "@/components/GameOverModal";
-import PlayerStatus from "@/components/PlayerStatus";
-import { ArrowLeft, Wifi, WifiOff, Loader2, Sparkles } from "lucide-react";
+import { ArrowLeft, Wifi, WifiOff, ShieldAlert, Sparkles, Loader2 } from "lucide-react";
 
 function LoadingScreen({ message }) {
   return (
     <div className="h-[100dvh] bg-[#060713] bg-game-grid flex items-center justify-center p-4">
       <div className="flex flex-col items-center gap-3 text-white/60 bg-[#0d0f22]/90 border border-white/12 rounded-2xl p-6 backdrop-blur-xl shadow-xl">
         <motion.div
-          className="w-9 h-9 rounded-full border-2 border-violet-500/30 border-t-violet-400"
+          className="w-9 h-9 rounded-full border-2 border-amber-500/30 border-t-amber-400"
           animate={{ rotate: 360 }}
           transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
         />
@@ -65,13 +65,13 @@ function WaitingScreen({ roomId }) {
             {[0, 1, 2].map((i) => (
               <motion.div
                 key={i}
-                className="w-2.5 h-2.5 rounded-full bg-violet-400"
+                className="w-2.5 h-2.5 rounded-full bg-amber-400"
                 animate={{ y: [0, -8, 0], opacity: [0.3, 1, 0.3] }}
                 transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.15 }}
               />
             ))}
           </div>
-          <span className="text-xs sm:text-sm font-bold text-white/70 font-display tracking-wide">Waiting for Opponent to Join…</span>
+          <span className="text-xs sm:text-sm font-bold text-white/70 font-display tracking-wide">Waiting for Player 2 to Join Room…</span>
         </div>
 
         <div className="w-full bg-[#0d0f22]/90 border border-white/12 rounded-2xl p-5 backdrop-blur-xl shadow-2xl">
@@ -82,45 +82,13 @@ function WaitingScreen({ roomId }) {
   );
 }
 
-function TurnBanner({ isMyTurn, mySymbol, currentTurn }) {
-  const isX = currentTurn === "X";
-  const theme = isX
-    ? "from-violet-950/70 via-violet-900/40 to-purple-950/70 border-violet-500/50 text-violet-300 shadow-[0_0_20px_rgba(139,92,246,0.3)]"
-    : "from-rose-950/70 via-rose-900/40 to-pink-950/70 border-rose-500/50 text-rose-300 shadow-[0_0_20px_rgba(244,63,94,0.3)]";
-
-  return (
-    <AnimatePresence mode="wait">
-      <motion.div
-        key={`${isMyTurn}-${currentTurn}`}
-        initial={{ opacity: 0, y: -6, scale: 0.96 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: 6, scale: 0.96 }}
-        transition={{ type: "spring", stiffness: 400, damping: 25 }}
-        className={`flex items-center justify-center gap-2.5 px-5 py-2 rounded-xl bg-gradient-to-r border text-xs sm:text-sm font-bold tracking-wider ${theme}`}
-      >
-        {isMyTurn ? (
-          <>
-            <Sparkles size={14} className="animate-spin text-amber-400" />
-            <span>YOUR TURN ({mySymbol})</span>
-          </>
-        ) : (
-          <>
-            <Loader2 size={14} className="animate-spin opacity-50" />
-            <span>OPPONENT&apos;S TURN ({currentTurn})</span>
-          </>
-        )}
-      </motion.div>
-    </AnimatePresence>
-  );
-}
-
-function RoomContent() {
+function KQContent() {
   const { id: roomId } = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  const symbolParam = searchParams.get("symbol");
-  const [mySymbol] = useState(symbolParam === "O" ? "O" : "X");
+  const playerParam = searchParams.get("player");
+  const [myPlayerId] = useState(playerParam === "P2" ? "P2" : "P1");
 
   const [gameState, setGameState] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -153,16 +121,6 @@ function RoomContent() {
         }
         const data = snapshot.val();
 
-        if (data.gameType === "kqbattle") {
-          router.replace(`/kqbattle/${roomId}${symbolParam ? `?player=${symbolParam === "X" ? "P1" : "P2"}` : ""}`);
-          return;
-        }
-
-        if (data.gameType === "rps") {
-          router.replace(`/rps/${roomId}${symbolParam ? `?player=${symbolParam === "X" ? "P1" : "P2"}` : ""}`);
-          return;
-        }
-
         if (data.emoji?.timestamp && data.emoji.timestamp !== lastEmojiTimestamp.current) {
           lastEmojiTimestamp.current = data.emoji.timestamp;
           setIncomingEmoji({ ...data.emoji });
@@ -185,77 +143,126 @@ function RoomContent() {
     );
 
     return () => unsubscribe();
-  }, [roomId, symbolParam, router]);
+  }, [roomId, router]);
 
+  // Handle player connection status
   useEffect(() => {
-    if (!roomId || !mySymbol) return;
-    update(roomPath(roomId, `players/${mySymbol}`), { connected: true }).catch(() => {});
+    if (!roomId || !myPlayerId) return;
+    update(roomPath(roomId, `players/${myPlayerId}`), { connected: true }).catch(() => {});
 
     const handleUnload = () => {
-      update(roomPath(roomId, `players/${mySymbol}`), { connected: false }).catch(() => {});
+      update(roomPath(roomId, `players/${myPlayerId}`), { connected: false }).catch(() => {});
     };
     window.addEventListener("beforeunload", handleUnload);
     return () => window.removeEventListener("beforeunload", handleUnload);
-  }, [roomId, mySymbol]);
+  }, [roomId, myPlayerId]);
 
-  const handleCellClick = useCallback(
-    async (index) => {
-      if (!gameState) return;
-      const { board = [], moves = {}, currentTurn, gridSize, winStreak, status } = gameState;
-
-      if (status !== "playing" || currentTurn !== mySymbol || board[index] !== "") return;
-
-      const newBoard = [...board];
-      const currentMoves = {
-        X: [...(moves?.X || [])],
-        O: [...(moves?.O || [])],
-      };
-      const playerMoves = currentMoves[mySymbol] || [];
-
-      // For 3x3 grid, max 3 marks per player. On 4th mark, automatically remove oldest mark.
-      if (gridSize === 3 && playerMoves.length >= 3) {
-        const oldestIndex = playerMoves.shift();
-        newBoard[oldestIndex] = "";
+  // Update placement in Firebase
+  const handleUpdatePlacement = useCallback(
+    async (placementMap) => {
+      try {
+        await update(roomPath(roomId, `placements/${myPlayerId}`), placementMap);
+      } catch (err) {
+        console.error("Placement update error:", err);
       }
+    },
+    [roomId, myPlayerId]
+  );
 
-      playerMoves.push(index);
-      currentMoves[mySymbol] = playerMoves;
-      newBoard[index] = mySymbol;
+  // Confirm placement & lock ready state
+  const handleConfirmReady = useCallback(async () => {
+    if (!gameState) return;
+    const { ready = {} } = gameState;
+    const nextReady = { ...ready, [myPlayerId]: true };
 
-      const { winner, winningCells } = checkWinner(newBoard, gridSize, winStreak);
+    const updates = {
+      [`ready/${myPlayerId}`]: true,
+    };
 
-      const updates = {
-        board: newBoard,
-        moves: currentMoves,
-        currentTurn: mySymbol === "X" ? "O" : "X",
-      };
+    // If both players have locked placement, transition game status to "playing"
+    if (nextReady.P1 && nextReady.P2) {
+      updates.status = "playing";
+    }
 
-      if (winner && winner !== "draw") {
-        updates.winner = winner;
-        updates.winningCells = winningCells;
-        updates.status = "finished";
+    try {
+      await update(roomRef(roomId), updates);
+    } catch (err) {
+      console.error("Confirm ready error:", err);
+    }
+  }, [gameState, roomId, myPlayerId]);
+
+  // Handle cell attack in Battle Mode
+  const handleAttackCell = useCallback(
+    async (cellIdx) => {
+      if (!gameState) return;
+      const {
+        placements = {},
+        attacks = {},
+        scores = { P1: 0, P2: 0 },
+        currentTurn,
+        status,
+      } = gameState;
+
+      if (status !== "playing" || currentTurn !== myPlayerId) return;
+
+      const attackerId = myPlayerId;
+      const defenderId = attackerId === "P1" ? "P2" : "P1";
+
+      const defenderPlacements = placements[defenderId] || {};
+      const attackerAttacks = { ...(attacks[attackerId] || {}) };
+
+      // Prevent re-attacking an already attacked cell
+      if (attackerAttacks[cellIdx] !== undefined) return;
+
+      const hitPieceId = defenderPlacements[cellIdx];
+      const isHit = Boolean(hitPieceId);
+
+      const updates = {};
+      const newScores = { ...scores };
+
+      if (isHit) {
+        const pieceScores = { KING: 100, QUEEN: 50, KNIGHT: 25, ARCHER: 10, SOLDIER: 5 };
+        const pointGain = pieceScores[hitPieceId] || 5;
+        newScores[attackerId] = (newScores[attackerId] || 0) + pointGain;
+
+        attackerAttacks[cellIdx] = { hit: true, pieceId: hitPieceId, score: pointGain };
+        
+        updates[`scores/${attackerId}`] = newScores[attackerId];
+        updates[`attacks/${attackerId}/${cellIdx}`] = { hit: true, pieceId: hitPieceId, score: pointGain };
+        updates.isBonusTurn = true;
+
+        const winner = checkKQWinner(newScores, TARGET_SCORE);
+        if (winner) {
+          updates.winner = winner;
+          updates.status = "finished";
+        }
+      } else {
+        attackerAttacks[cellIdx] = { hit: false };
+        updates[`attacks/${attackerId}/${cellIdx}`] = { hit: false };
+        updates.currentTurn = defenderId;
+        updates.isBonusTurn = false;
       }
 
       try {
         await update(roomRef(roomId), updates);
       } catch (err) {
-        console.error("Move update error:", err);
+        console.error("Attack cell error:", err);
       }
     },
-    [gameState, mySymbol, roomId]
+    [gameState, myPlayerId, roomId]
   );
 
   const handleSendEmoji = useCallback(
     async (emoji) => {
       try {
         await update(roomRef(roomId), {
-          emoji: { value: emoji, sentBy: mySymbol, timestamp: Date.now() },
+          emoji: { value: emoji, sentBy: myPlayerId, timestamp: Date.now() },
         });
       } catch (err) {
         console.error("Emoji error:", err);
       }
     },
-    [roomId, mySymbol]
+    [roomId, myPlayerId]
   );
 
   const handlePlayAgain = useCallback(async () => {
@@ -263,12 +270,14 @@ function RoomContent() {
     setShowModal(false);
     try {
       await update(roomRef(roomId), {
-        board: createEmptyBoard(gameState.gridSize || 3),
-        moves: { X: [], O: [] },
-        currentTurn: "X",
-        status: "playing",
+        status: "placement",
+        ready: { P1: false, P2: false },
+        placements: { P1: {}, P2: {} },
+        attacks: { P1: {}, P2: {} },
+        scores: { P1: 0, P2: 0 },
+        currentTurn: "P1",
+        isBonusTurn: false,
         winner: null,
-        winningCells: [],
         emoji: null,
       });
     } catch (err) {
@@ -278,33 +287,48 @@ function RoomContent() {
 
   const handleExit = useCallback(async () => {
     try {
-      await update(roomPath(roomId, `players/${mySymbol}`), { connected: false });
+      await update(roomPath(roomId, `players/${myPlayerId}`), { connected: false });
     } catch {}
     router.push("/");
-  }, [roomId, mySymbol, router]);
+  }, [roomId, myPlayerId, router]);
 
-  if (loading) return <LoadingScreen message="CONNECTING TO ROOM…" />;
+  if (loading) return <LoadingScreen message="CONNECTING TO BATTLE ROOM…" />;
   if (error) return <ErrorScreen message={error} onHome={() => router.push("/")} />;
   if (!gameState) return <LoadingScreen message="LOADING MATCH DATA…" />;
 
-  const { board = [], moves = {}, gridSize = 3, winStreak = 3, currentTurn, players, status, winner, winningCells = [] } = gameState;
+  const {
+    players = {},
+    status = "placement",
+    ready = {},
+    placements = {},
+    attacks = {},
+    scores = { P1: 0, P2: 0 },
+    currentTurn = "P1",
+    isBonusTurn = false,
+    winner = null,
+  } = gameState;
 
-  if (status === "waiting" && mySymbol === "X") {
+  const myPlacement = placements[myPlayerId] || {};
+  const myAttacks = attacks[myPlayerId] || {};
+  const opponentId = myPlayerId === "P1" ? "P2" : "P1";
+  const opponentAttacks = attacks[opponentId] || {};
+
+  const myReady = ready[myPlayerId] ?? false;
+
+  if (!players.P2?.connected && myPlayerId === "P1") {
     return <WaitingScreen roomId={roomId} />;
   }
 
-  const isMyTurn = currentTurn === mySymbol;
-
   return (
     <main className="relative h-[100dvh] bg-[#060713] bg-game-grid flex flex-col justify-between items-center px-3.5 py-4 sm:px-6 sm:py-6 overflow-hidden">
-      {/* Background Glow Orbs */}
+      {/* Background Ambient Glow Orbs */}
       <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-[-15%] left-[-15%] w-80 h-80 bg-violet-600/15 rounded-full blur-3xl" />
-        <div className="absolute bottom-[-15%] right-[-15%] w-80 h-80 bg-rose-600/15 rounded-full blur-3xl" />
+        <div className="absolute top-[-15%] left-[-15%] w-80 h-80 bg-amber-600/15 rounded-full blur-3xl" />
+        <div className="absolute bottom-[-15%] right-[-15%] w-80 h-80 bg-cyan-600/15 rounded-full blur-3xl" />
       </div>
 
       <div className="relative z-10 w-full max-w-md sm:max-w-lg mx-auto flex flex-col items-center justify-between h-full py-1 gap-2.5 sm:gap-3.5">
-        {/* Header Bar */}
+        {/* Top Header Bar */}
         <div className="w-full flex items-center justify-between flex-shrink-0">
           <button
             onClick={handleExit}
@@ -313,39 +337,45 @@ function RoomContent() {
             <ArrowLeft size={14} /> Exit
           </button>
 
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#0a0c24] border border-white/15 text-xs font-mono text-violet-300 font-bold shadow-sm">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#0a0c24] border border-white/15 text-xs font-mono text-amber-300 font-bold shadow-sm">
             <Wifi size={12} className="text-emerald-400 animate-pulse" />
             <span>ROOM: {roomId}</span>
           </div>
 
           <div className="text-white/60 text-xs font-mono font-bold">
-            {gridSize}×{gridSize} · Win: {winStreak}
+            Target: 200 pts
           </div>
         </div>
 
-        {/* Players Status HUD */}
+        {/* Players Score Status HUD */}
         <div className="w-full flex-shrink-0">
-          <PlayerStatus players={players} currentTurn={currentTurn} mySymbol={mySymbol} />
-        </div>
-
-        {/* Turn Status Banner */}
-        <div className="w-full flex justify-center flex-shrink-0">
-          {status === "playing" && (
-            <TurnBanner isMyTurn={isMyTurn} mySymbol={mySymbol} currentTurn={currentTurn} />
-          )}
-        </div>
-
-        {/* Centered Game Board Container */}
-        <div className="w-full flex-1 flex items-center justify-center min-h-0 my-auto">
-          <GameBoard
-            board={board}
-            moves={moves}
-            gridSize={gridSize}
-            winningCells={winningCells || []}
+          <KQPlayerStatus
+            players={players}
+            scores={scores}
             currentTurn={currentTurn}
-            mySymbol={mySymbol}
-            gameStatus={status}
-            onCellClick={handleCellClick}
+            myPlayerId={myPlayerId}
+            status={status}
+            isBonusTurn={isBonusTurn}
+            ready={ready}
+          />
+        </div>
+
+        {/* Centered Board Container (Placement or Battle Mode) */}
+        <div className="w-full flex-1 flex items-center justify-center min-h-0 my-auto">
+          <KQBoard
+            mode={status === "placement" ? "placement" : "battle"}
+            myPlayerId={myPlayerId}
+            myPlacement={myPlacement}
+            myAttacks={myAttacks}
+            opponentAttacks={opponentAttacks}
+            myScores={scores[myPlayerId] || 0}
+            opponentScores={scores[opponentId] || 0}
+            currentTurn={currentTurn}
+            isBonusTurn={isBonusTurn}
+            isReady={myReady}
+            onUpdatePlacement={handleUpdatePlacement}
+            onConfirmReady={handleConfirmReady}
+            onAttackCell={handleAttackCell}
           />
         </div>
 
@@ -355,13 +385,13 @@ function RoomContent() {
         </div>
       </div>
 
-      {/* Game Over Modal */}
+      {/* Game Over Victory Modal */}
       <AnimatePresence>
         {showModal && winner && (
           <GameOverModal
             winner={winner}
-            mySymbol={mySymbol}
-            gridSize={gridSize}
+            mySymbol={myPlayerId}
+            gridSize={8}
             onPlayAgain={handlePlayAgain}
             onExit={handleExit}
           />
@@ -371,10 +401,10 @@ function RoomContent() {
   );
 }
 
-export default function RoomPage() {
+export default function KQBattlePage() {
   return (
-    <Suspense fallback={<LoadingScreen message="CONNECTING TO ROOM…" />}>
-      <RoomContent />
+    <Suspense fallback={<LoadingScreen message="CONNECTING TO BATTLE ROOM…" />}>
+      <KQContent />
     </Suspense>
   );
 }

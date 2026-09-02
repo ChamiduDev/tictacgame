@@ -26,6 +26,7 @@ import {
   Circle,
   Flame,
   Globe2,
+  Crown,
 } from "lucide-react";
 
 const GRID_OPTIONS = [
@@ -372,6 +373,116 @@ function CreateRPSModal({ onClose }) {
   );
 }
 
+function CreateKQBattleModal({ onClose }) {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleCreate = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const roomId = generateRoomCode();
+      await set(roomRef(roomId), {
+        gameType: "kqbattle",
+        status: "placement",
+        targetScore: 200,
+        gridSize: 8,
+        players: { P1: { connected: true }, P2: { connected: false } },
+        ready: { P1: false, P2: false },
+        placements: { P1: {}, P2: {} },
+        attacks: { P1: {}, P2: {} },
+        scores: { P1: 0, P2: 0 },
+        currentTurn: "P1",
+        isBonusTurn: false,
+        winner: null,
+        emoji: null,
+        createdAt: Date.now(),
+      });
+      router.push(`/kqbattle/${roomId}?player=P1`);
+    } catch {
+      setError("Failed to create King & Queen Battle room. Check your Firebase config.");
+      setLoading(false);
+    }
+  };
+
+  return (
+    <ModalSheet
+      onClose={onClose}
+      title="Create King & Queen Battle"
+      subtitle="8×8 secret piece placement strategy"
+      icon={Crown}
+      accentColor="amber"
+    >
+      <div className="flex flex-col gap-6 sm:gap-7">
+        <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-500/15 border border-amber-500/25 flex items-start sm:items-center gap-4.5 shadow-lg relative overflow-hidden">
+          <div className="w-13 h-13 rounded-2xl bg-amber-500/20 border border-amber-500/35 flex items-center justify-center text-amber-300 flex-shrink-0 shadow-md text-2xl">
+            👑
+          </div>
+          <div className="flex flex-col gap-1">
+            <h4 className="text-base sm:text-lg font-extrabold text-white tracking-wide">200-Point Target Battle</h4>
+            <p className="text-white/70 text-xs sm:text-sm leading-relaxed font-normal">
+              Secretly place King, Queen, Knights, Archers & Soldiers. Capture enemy pieces for points + bonus turns!
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3.5">
+          <div className="flex items-center gap-4 p-4 sm:p-4.5 rounded-xl bg-white/[0.04] border border-white/10 hover:border-amber-400/30 transition-colors">
+            <div className="w-9 h-9 rounded-lg bg-amber-400/15 border border-amber-400/30 flex items-center justify-center text-amber-300 flex-shrink-0">
+              <Crown size={18} />
+            </div>
+            <div className="flex flex-col text-xs sm:text-sm text-white/80">
+              <strong className="text-white font-semibold">High Value Fleet (100pt King & 50pt Queen)</strong>
+              <span className="text-white/60 text-xs mt-0.5">Protect your royal pieces while hunting the enemy&apos;s fleet.</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4 p-4 sm:p-4.5 rounded-xl bg-white/[0.04] border border-white/10 hover:border-indigo-400/30 transition-colors">
+            <div className="w-9 h-9 rounded-lg bg-indigo-400/15 border border-indigo-400/30 flex items-center justify-center text-indigo-300 flex-shrink-0">
+              <Zap size={18} />
+            </div>
+            <div className="flex flex-col text-xs sm:text-sm text-white/80">
+              <strong className="text-white font-semibold">Bonus Turn Combos</strong>
+              <span className="text-white/60 text-xs mt-0.5">Every successful capture grants an immediate extra attack.</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4 p-4 sm:p-4.5 rounded-xl bg-white/[0.04] border border-white/10 hover:border-rose-400/30 transition-colors">
+            <div className="w-9 h-9 rounded-lg bg-rose-400/15 border border-rose-400/30 flex items-center justify-center text-rose-300 flex-shrink-0">
+              <Trophy size={18} />
+            </div>
+            <div className="flex flex-col text-xs sm:text-sm text-white/80">
+              <strong className="text-white font-semibold">Race to 200 Points</strong>
+              <span className="text-white/60 text-xs mt-0.5">First player to reach 200 points wins the match instantly.</span>
+            </div>
+          </div>
+        </div>
+
+        {error && (
+          <div className="text-rose-400 text-xs sm:text-sm font-medium text-center bg-rose-500/10 border border-rose-500/20 rounded-xl p-4">
+            {error}
+          </div>
+        )}
+
+        <div className="pt-4 sm:pt-5 border-t border-white/10">
+          <button
+            onClick={handleCreate}
+            disabled={loading}
+            className="btn-game-primary btn-game-amber w-full !min-h-[3.375rem] !text-sm sm:!text-base font-bold shadow-lg"
+          >
+            {loading ? (
+              <><Loader2 size={18} className="animate-spin" /> Launching Battle Room…</>
+            ) : (
+              <>Launch King & Queen Room <ArrowRight size={18} /></>
+            )}
+          </button>
+        </div>
+      </div>
+    </ModalSheet>
+  );
+}
+
 function JoinGameModal({ onClose }) {
   const router = useRouter();
   const [code, setCode] = useState("");
@@ -388,7 +499,11 @@ function JoinGameModal({ onClose }) {
       if (!snapshot.exists()) { setError("Room not found — double check your code"); setLoading(false); return; }
       const room = snapshot.val();
       
-      if (room.gameType === "rps") {
+      if (room.gameType === "kqbattle") {
+        if (room.players?.P2?.connected) { setError("King & Queen Battle Room is full!"); setLoading(false); return; }
+        await update(roomRef(trimmed), { "players/P2/connected": true });
+        router.push(`/kqbattle/${trimmed}?player=P2`);
+      } else if (room.gameType === "rps") {
         if (room.players?.P2?.connected) { setError("RPS Room is full!"); setLoading(false); return; }
         await update(roomRef(trimmed), { "players/P2/connected": true, status: "playing" });
         router.push(`/rps/${trimmed}?player=P2`);
@@ -438,7 +553,7 @@ function JoinGameModal({ onClose }) {
         )}
 
         <p className="text-white/50 text-xs sm:text-sm text-center leading-relaxed">
-          Works for both <strong>Tic-Tac-Toe</strong> & <strong>Rock Paper Scissors Duo</strong> matches.
+          Works for <strong>Tic-Tac-Toe</strong>, <strong>Rock Paper Scissors</strong> & <strong>King & Queen Grid Battle</strong> matches.
         </p>
 
         <div className="pt-3 border-t border-white/10">
@@ -450,7 +565,7 @@ function JoinGameModal({ onClose }) {
             {loading ? (
               <><Loader2 size={18} className="animate-spin" /> Joining Room…</>
             ) : (
-              <>Join Room <ArrowRight size={18} /></>
+              <>Join Room <ArrowRight size={16} /></>
             )}
           </button>
         </div>
@@ -483,7 +598,11 @@ export default function HomePage() {
         return;
       }
       const room = snapshot.val();
-      if (room.gameType === "rps") {
+      if (room.gameType === "kqbattle") {
+        if (room.players?.P2?.connected) { setQuickError("Room is full"); setQuickLoading(false); return; }
+        await update(roomRef(trimmed), { "players/P2/connected": true });
+        router.push(`/kqbattle/${trimmed}?player=P2`);
+      } else if (room.gameType === "rps") {
         if (room.players?.P2?.connected) { setQuickError("Room is full"); setQuickLoading(false); return; }
         await update(roomRef(trimmed), { "players/P2/connected": true, status: "playing" });
         router.push(`/rps/${trimmed}?player=P2`);
@@ -589,13 +708,13 @@ export default function HomePage() {
         </section>
         
         {/* Game Mode Cards Grid */}
-        <section className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 w-full">
+        <section className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-7 w-full">
           
           {/* Card 1: Tic Tac Toe Arena */}
-          <div className="game-panel p-7 sm:p-9 flex flex-col justify-between border border-white/10 hover:border-indigo-500/40 hover:bg-[#0e122b]/95 transition-all duration-300 group">
+          <div className="game-panel p-7 sm:p-8 flex flex-col justify-between border border-white/10 hover:border-indigo-500/40 hover:bg-[#0e122b]/95 transition-all duration-300 group">
             <div>
               {/* Card Header & Custom Vector Icon */}
-              <div className="flex items-center justify-between mb-7">
+              <div className="flex items-center justify-between mb-6">
                 <div className="w-13 h-13 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 text-indigo-400 flex items-center justify-center shadow-md flex-shrink-0">
                   <div className="grid grid-cols-2 gap-1.5 p-1">
                     <X size={15} className="text-indigo-400 stroke-[3]" />
@@ -604,56 +723,87 @@ export default function HomePage() {
                     <X size={15} className="text-indigo-400 stroke-[3]" />
                   </div>
                 </div>
-                <span className="text-xs font-semibold font-mono text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-3.5 py-1.5 rounded-md">
+                <span className="text-xs font-semibold font-mono text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-3 py-1 rounded-md">
                   3×3 to 6×6
                 </span>
               </div>
 
-              <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight group-hover:text-indigo-300 transition-colors">
+              <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight group-hover:text-indigo-300 transition-colors">
                 Tic-Tac-Toe Arena
               </h2>
               <p className="text-white/60 text-xs sm:text-sm mt-3 leading-relaxed font-normal">
-                Strategic turn-based tactical battles on classic 3×3 or expanded 4×4, 5×5, and 6×6 boards with custom win streak targets.
+                Strategic turn-based tactical battles on classic 3×3 or expanded boards with endless 3-mark mechanics.
               </p>
             </div>
 
-            <div className="mt-9 pt-6 border-t border-white/10">
+            <div className="mt-8 pt-5 border-t border-white/10">
               <button
                 onClick={() => setActiveModal("create-tictactoe")}
-                className="btn-game-primary w-full !min-h-[3.25rem] !text-sm sm:!text-base"
+                className="btn-game-primary w-full !min-h-[3.25rem] !text-sm"
               >
-                <Gamepad2 size={18} /> Create Tic Tac Toe Room
+                <Gamepad2 size={18} /> Create Tic Tac Toe
               </button>
             </div>
           </div>
 
           {/* Card 2: Rock Paper Scissors Duo */}
-          <div className="game-panel p-7 sm:p-9 flex flex-col justify-between border border-white/10 hover:border-amber-500/40 hover:bg-[#14122b]/95 transition-all duration-300 group">
+          <div className="game-panel p-7 sm:p-8 flex flex-col justify-between border border-white/10 hover:border-amber-500/40 hover:bg-[#14122b]/95 transition-all duration-300 group">
             <div>
               {/* Card Header & Custom Vector Icon */}
-              <div className="flex items-center justify-between mb-7">
+              <div className="flex items-center justify-between mb-6">
                 <div className="w-13 h-13 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30 text-amber-400 flex items-center justify-center shadow-md flex-shrink-0">
                   <Swords size={24} className="text-amber-400 stroke-[2.2]" />
                 </div>
-                <span className="text-xs font-semibold font-mono text-amber-300 bg-amber-500/10 border border-amber-500/20 px-3.5 py-1.5 rounded-md">
+                <span className="text-xs font-semibold font-mono text-amber-300 bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-md">
                   2-Player Showdown
                 </span>
               </div>
 
-              <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight group-hover:text-amber-300 transition-colors">
+              <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight group-hover:text-amber-300 transition-colors">
                 Rock Paper Scissors Duo
               </h2>
               <p className="text-white/60 text-xs sm:text-sm mt-3 leading-relaxed font-normal">
-                Simultaneous secret choice locking, instant round outcome reveals, endless score tracking, and animated emoji reactions.
+                Simultaneous secret choice locking, instant round reveals, score tracking, and live reactions.
               </p>
             </div>
 
-            <div className="mt-9 pt-6 border-t border-white/10">
+            <div className="mt-8 pt-5 border-t border-white/10">
               <button
                 onClick={() => setActiveModal("create-rps")}
-                className="btn-game-primary btn-game-amber w-full !min-h-[3.25rem] !text-sm sm:!text-base"
+                className="btn-game-primary btn-game-amber w-full !min-h-[3.25rem] !text-sm"
               >
                 <Flame size={18} /> Create RPS Room
+              </button>
+            </div>
+          </div>
+
+          {/* Card 3: King & Queen Grid Battle */}
+          <div className="game-panel p-7 sm:p-8 flex flex-col justify-between border border-white/10 hover:border-amber-400/40 hover:bg-[#19152b]/95 transition-all duration-300 group">
+            <div>
+              {/* Card Header & Custom Vector Icon */}
+              <div className="flex items-center justify-between mb-6">
+                <div className="w-13 h-13 rounded-xl bg-gradient-to-br from-amber-400/20 to-yellow-500/20 border border-amber-400/30 text-amber-300 flex items-center justify-center shadow-md flex-shrink-0 text-2xl">
+                  👑
+                </div>
+                <span className="text-xs font-semibold font-mono text-amber-300 bg-amber-400/10 border border-amber-400/20 px-3 py-1 rounded-md">
+                  8×8 Grid Strategy
+                </span>
+              </div>
+
+              <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight group-hover:text-amber-300 transition-colors">
+                King & Queen Grid Battle
+              </h2>
+              <p className="text-white/60 text-xs sm:text-sm mt-3 leading-relaxed font-normal">
+                Secret character placement on an 8×8 grid. Capture King, Queen & Soldiers for points + bonus turns to reach 200 pts!
+              </p>
+            </div>
+
+            <div className="mt-8 pt-5 border-t border-white/10">
+              <button
+                onClick={() => setActiveModal("create-kqbattle")}
+                className="btn-game-primary btn-game-amber w-full !min-h-[3.25rem] !text-sm"
+              >
+                <Crown size={18} /> Create King & Queen Room
               </button>
             </div>
           </div>
@@ -695,6 +845,9 @@ export default function HomePage() {
         )}
         {activeModal === "create-rps" && (
           <CreateRPSModal onClose={() => setActiveModal(null)} />
+        )}
+        {activeModal === "create-kqbattle" && (
+          <CreateKQBattleModal onClose={() => setActiveModal(null)} />
         )}
         {activeModal === "join" && (
           <JoinGameModal onClose={() => setActiveModal(null)} />
