@@ -54,8 +54,8 @@ export default function RoomCode({ roomId }) {
       </div>
 
       {/* Code Card */}
-      <div className="w-full flex items-center justify-between bg-[#070817] border border-white/15 rounded-xl p-3 sm:p-4 shadow-inner">
-        <div className="flex items-center gap-1.5 sm:gap-2 font-mono text-xl sm:text-2xl font-black tracking-widest text-white pl-1">
+      <div className="w-full flex items-center justify-between bg-[#070817] border border-white/15 rounded-xl p-4 sm:p-5 shadow-inner gap-3">
+        <div className="flex items-center gap-2 sm:gap-2.5 font-mono text-xl sm:text-2xl font-black tracking-widest text-white pl-1">
           {roomId.split("").map((char, i) => (
             <motion.span
               key={i}
@@ -71,7 +71,7 @@ export default function RoomCode({ roomId }) {
 
         <button
           onClick={handleCopyCode}
-          className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+          className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex-shrink-0 ${
             codeCopied
               ? "bg-emerald-500/25 border border-emerald-400/50 text-emerald-300"
               : "bg-violet-600/35 hover:bg-violet-600/50 border border-violet-400/40 text-violet-200"

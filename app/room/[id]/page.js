@@ -196,21 +196,36 @@ function RoomContent() {
   const handleCellClick = useCallback(
     async (index) => {
       if (!gameState) return;
-      const { board = [], currentTurn, gridSize, winStreak, status } = gameState;
+      const { board = [], moves = {}, currentTurn, gridSize, winStreak, status } = gameState;
 
       if (status !== "playing" || currentTurn !== mySymbol || board[index] !== "") return;
 
       const newBoard = [...board];
+      const currentMoves = {
+        X: [...(moves?.X || [])],
+        O: [...(moves?.O || [])],
+      };
+      const playerMoves = currentMoves[mySymbol] || [];
+
+      // For 3x3 grid, max 3 marks per player. On 4th mark, automatically remove oldest mark.
+      if (gridSize === 3 && playerMoves.length >= 3) {
+        const oldestIndex = playerMoves.shift();
+        newBoard[oldestIndex] = "";
+      }
+
+      playerMoves.push(index);
+      currentMoves[mySymbol] = playerMoves;
       newBoard[index] = mySymbol;
 
       const { winner, winningCells } = checkWinner(newBoard, gridSize, winStreak);
 
       const updates = {
         board: newBoard,
+        moves: currentMoves,
         currentTurn: mySymbol === "X" ? "O" : "X",
       };
 
-      if (winner) {
+      if (winner && winner !== "draw") {
         updates.winner = winner;
         updates.winningCells = winningCells;
         updates.status = "finished";
@@ -244,6 +259,7 @@ function RoomContent() {
     try {
       await update(roomRef(roomId), {
         board: createEmptyBoard(gameState.gridSize || 3),
+        moves: { X: [], O: [] },
         currentTurn: "X",
         status: "playing",
         winner: null,
@@ -266,7 +282,7 @@ function RoomContent() {
   if (error) return <ErrorScreen message={error} onHome={() => router.push("/")} />;
   if (!gameState) return <LoadingScreen message="LOADING MATCH DATA…" />;
 
-  const { board = [], gridSize = 3, winStreak = 3, currentTurn, players, status, winner, winningCells = [] } = gameState;
+  const { board = [], moves = {}, gridSize = 3, winStreak = 3, currentTurn, players, status, winner, winningCells = [] } = gameState;
 
   if (status === "waiting" && mySymbol === "X") {
     return <WaitingScreen roomId={roomId} />;
@@ -318,6 +334,7 @@ function RoomContent() {
         <div className="w-full flex-1 flex items-center justify-center min-h-0 my-auto">
           <GameBoard
             board={board}
+            moves={moves}
             gridSize={gridSize}
             winningCells={winningCells || []}
             currentTurn={currentTurn}

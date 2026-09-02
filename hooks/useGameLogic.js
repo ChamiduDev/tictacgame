@@ -72,8 +72,8 @@ export function checkWinner(board, gridSize, winStreak) {
     }
   }
 
-  // ── Draw detection ────────────────────────────────────────────────────
-  if (board.every((cell) => cell !== "")) {
+  // ── Draw detection (only for grid sizes > 3) ──────────────────────────────────
+  if (gridSize > 3 && board.every((cell) => cell !== "")) {
     return { winner: "draw", winningCells: [] };
   }
 

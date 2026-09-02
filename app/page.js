@@ -4,7 +4,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { set } from "firebase/database";
+import { set, get, update } from "firebase/database";
 import { roomRef } from "@/lib/firebase";
 import { generateRoomCode, createEmptyBoard, getWinStreak } from "@/hooks/useGameLogic";
 import {
@@ -15,35 +15,41 @@ import {
   Hash,
   Loader2,
   Zap,
-  Smile,
   Trophy,
+  Smile,
   Sparkles,
   CheckCircle2,
   Swords,
+  ShieldCheck,
+  Play,
+  Grid,
+  Circle,
+  Flame,
+  Globe2,
 } from "lucide-react";
 
 const GRID_OPTIONS = [
-  { size: 3, label: "3×3", tag: "Classic", desc: "3 in a row" },
-  { size: 4, label: "4×4", tag: "Advanced", desc: "4 in a row" },
-  { size: 5, label: "5×5", tag: "Expert", desc: "4 in a row" },
-  { size: 6, label: "6×6", tag: "Master", desc: "5 in a row" },
+  { size: 3, label: "3×3", tag: "Classic", desc: "3 in a row to win" },
+  { size: 4, label: "4×4", tag: "Advanced", desc: "4 in a row to win" },
+  { size: 5, label: "5×5", tag: "Expert", desc: "4 in a row to win" },
+  { size: 6, label: "6×6", tag: "Master", desc: "5 in a row to win" },
 ];
 
-function FloatingOrb({ className, delay }) {
+function FloatingOrb({ className, delay = 0 }) {
   return (
     <motion.div
-      className={`absolute rounded-full blur-3xl opacity-[0.12] pointer-events-none ${className}`}
-      animate={{ y: [0, -24, 0], scale: [1, 1.08, 1] }}
+      className={`absolute rounded-full blur-3xl opacity-15 pointer-events-none ${className}`}
+      animate={{ y: [0, -18, 0], scale: [1, 1.04, 1] }}
       transition={{ duration: 8 + delay, repeat: Infinity, ease: "easeInOut", delay }}
     />
   );
 }
 
-function Sheet({ children, onClose, title, icon: Icon, accentColor }) {
-  const accent = {
-    violet: "from-violet-600/25 via-purple-600/15 to-transparent border-violet-500/30 text-violet-200",
-    rose: "from-rose-600/25 via-pink-600/15 to-transparent border-rose-500/30 text-rose-200",
-    amber: "from-amber-600/25 via-orange-600/15 to-transparent border-amber-500/30 text-amber-200",
+function ModalSheet({ children, onClose, title, subtitle, icon: Icon, accentColor = "indigo" }) {
+  const borderAccents = {
+    indigo: "border-indigo-500/30 text-indigo-400 bg-indigo-500/10",
+    amber: "border-amber-500/30 text-amber-400 bg-amber-500/10",
+    rose: "border-rose-500/30 text-rose-400 bg-rose-500/10",
   };
 
   return (
@@ -61,46 +67,41 @@ function Sheet({ children, onClose, title, icon: Icon, accentColor }) {
         onClick={onClose}
       />
 
-      {/* Spacious, Centered Game Modal Card */}
+      {/* Modal Dialog Card using game-panel styling & generous inner padding */}
       <motion.div
-        className="relative z-10 w-full max-w-[min(94vw,470px)] mx-auto bg-[#0a0c1e]/95 border border-white/10 rounded-xl shadow-2xl overflow-hidden my-auto flex flex-col"
-        initial={{ scale: 0.94, opacity: 0, y: 10 }}
+        className="relative z-10 w-full max-w-xl mx-auto game-panel !p-6 sm:!p-8 border border-white/15 shadow-2xl my-auto flex flex-col gap-6 sm:gap-7"
+        initial={{ scale: 0.95, opacity: 0, y: 15 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
-        exit={{ scale: 0.94, opacity: 0, y: 10 }}
-        transition={{ type: "spring", stiffness: 380, damping: 28 }}
+        exit={{ scale: 0.95, opacity: 0, y: 15 }}
+        transition={{ type: "spring", stiffness: 350, damping: 25 }}
       >
-        {/* Modal Header */}
-        <div className={`bg-gradient-to-r ${accent[accentColor]} border-b border-white/10 px-5 py-4 sm:px-6 sm:py-5 flex items-center justify-between flex-shrink-0`}>
-          <div className="flex items-center gap-3.5">
-            <div className="w-10 h-10 rounded-lg bg-white/10 border border-white/15 flex items-center justify-center flex-shrink-0">
-              <Icon size={20} className="text-white" />
+        {/* Header inside the padded main card background */}
+        <div className="flex items-center justify-between pb-5 sm:pb-6 border-b border-white/10 px-1">
+          <div className="flex items-center gap-4">
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center border flex-shrink-0 shadow-md ${borderAccents[accentColor]}`}>
+              <Icon size={22} />
             </div>
             <div>
-              <h2 className="text-lg sm:text-xl font-bold tracking-wide font-display text-white">
-                {title}
-              </h2>
-              <p className="text-white/50 text-xs mt-0.5 font-medium flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Realtime Lobby Setup
-              </p>
+              <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">{title}</h2>
+              {subtitle && <p className="text-white/50 text-xs sm:text-sm mt-0.5">{subtitle}</p>}
             </div>
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/15 active:bg-white/20 border border-white/10 flex items-center justify-center text-white/60 hover:text-white transition-all cursor-pointer"
+            className="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 active:scale-95 border border-white/10 flex items-center justify-center text-white/70 hover:text-white transition-all cursor-pointer flex-shrink-0 ml-3"
           >
-            <X size={16} />
+            <X size={20} />
           </button>
         </div>
 
-        {/* Content Body */}
-        <div className="p-5 sm:p-6 overflow-y-auto max-h-[82vh]">{children}</div>
+        {/* Content Body with generous inner spacing from card edges */}
+        <div className="max-h-[75vh] overflow-y-auto px-2 sm:px-3 py-1">{children}</div>
       </motion.div>
     </motion.div>
   );
 }
 
-function CreateTicTacToeSheet({ onClose }) {
+function CreateTicTacToeModal({ onClose }) {
   const router = useRouter();
   const [selectedSize, setSelectedSize] = useState(3);
   const [customSize, setCustomSize] = useState("");
@@ -139,138 +140,131 @@ function CreateTicTacToeSheet({ onClose }) {
   };
 
   return (
-    <Sheet onClose={onClose} title="Create Tic Tac Toe" icon={Gamepad2} accentColor="violet">
-      <div className="flex flex-col gap-5">
+    <ModalSheet
+      onClose={onClose}
+      title="Create Tic Tac Toe"
+      subtitle="Setup grid size and match rules"
+      icon={Gamepad2}
+      accentColor="indigo"
+    >
+      <div className="flex flex-col gap-6 sm:gap-7">
         <div>
-          {/* Header Label */}
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-white/50 text-xs font-bold uppercase tracking-wider font-mono">
-              SELECT ARENA SIZE
-            </span>
-            <span className="text-violet-300 text-xs font-bold font-mono px-2.5 py-1 rounded-md bg-violet-500/10 border border-violet-500/20">
-              {finalSize}×{finalSize} Arena
+          <div className="flex items-center justify-between mb-4 px-1">
+            <span className="text-white/60 text-xs font-semibold uppercase tracking-wider">Select Grid Size</span>
+            <span className="text-indigo-300 text-xs font-mono font-bold px-3 py-1 rounded-md bg-indigo-500/15 border border-indigo-500/30">
+              {finalSize}×{finalSize} Grid
             </span>
           </div>
 
-          {/* Grid Selection Cards */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-4">
             {GRID_OPTIONS.map(({ size, label, tag, desc }) => {
               const isActive = !useCustom && selectedSize === size;
               return (
                 <button
                   key={size}
                   onClick={() => { setSelectedSize(size); setUseCustom(false); }}
-                  className={`flex flex-col text-left p-3.5 rounded-lg border transition-all duration-150 cursor-pointer relative overflow-hidden group
-                    ${isActive
-                      ? "border-violet-500/60 bg-violet-500/15 text-white"
-                      : "border-white/10 bg-white/[0.03] hover:bg-white/[0.07] hover:border-white/20 text-white/70"}`}
+                  className={`flex flex-col p-4 sm:p-5 rounded-xl border text-left transition-all cursor-pointer ${
+                    isActive
+                      ? "border-indigo-500 bg-indigo-500/20 text-white shadow-md shadow-indigo-500/10"
+                      : "border-white/10 bg-white/[0.03] hover:bg-white/[0.07] text-white/70 hover:border-white/20"
+                  }`}
                 >
-                  <div className="flex items-center justify-between w-full mb-1.5">
-                    <span className="text-2xl font-black text-white font-mono tracking-tight">{label}</span>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${isActive ? "text-violet-200 bg-violet-500/30" : "text-white/40 bg-white/5"}`}>
+                  <div className="flex items-center justify-between w-full mb-1">
+                    <span className="text-xl font-bold font-mono text-white">{label}</span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${isActive ? "bg-indigo-500/30 text-indigo-200" : "bg-white/10 text-white/50"}`}>
                       {tag}
                     </span>
                   </div>
-                  <span className="text-xs font-medium text-white/50">{desc}</span>
+                  <span className="text-xs text-white/50">{desc}</span>
                 </button>
               );
             })}
           </div>
         </div>
 
-        {/* Custom Grid Size Selector */}
-        <div className="flex flex-col gap-2">
+        {/* Custom Grid Toggle */}
+        <div className="flex flex-col gap-3">
           <button
             onClick={() => setUseCustom(!useCustom)}
-            className={`flex items-center justify-between text-xs font-bold px-3.5 py-3 rounded-lg border transition-all cursor-pointer
-              ${useCustom
-                ? "text-violet-300 bg-violet-500/15 border-violet-500/40"
-                : "text-white/70 border-white/10 bg-white/[0.03] hover:text-white hover:border-white/20"}`}
+            className={`flex items-center justify-between text-xs font-semibold px-4 py-3.5 rounded-xl border transition-all cursor-pointer ${
+              useCustom
+                ? "text-indigo-300 bg-indigo-500/15 border-indigo-500/40"
+                : "text-white/70 border-white/10 bg-white/[0.03] hover:bg-white/[0.06] hover:text-white"
+            }`}
           >
-            <div className="flex items-center gap-2">
-              <Hash size={15} className="text-violet-400" />
-              <span>Custom Grid Size (N × N)</span>
+            <div className="flex items-center gap-2.5">
+              <Hash size={16} className="text-indigo-400" />
+              <span>Custom Grid (3×3 to 6×6)</span>
             </div>
-            <span className="text-xs text-white/40 font-mono font-bold">3 to 6</span>
+            <span className="text-xs text-white/40 font-mono">Select</span>
           </button>
 
-          <AnimatePresence>
-            {useCustom && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                className="overflow-hidden"
-              >
-                <div className="flex items-center gap-2 p-2 bg-[#07091d] border border-white/10 rounded-lg">
-                  <input
-                    type="number"
-                    min={3}
-                    max={6}
-                    value={customSize}
-                    onChange={(e) => setCustomSize(e.target.value)}
-                    placeholder="Enter 3, 4, 5, or 6"
-                    className="w-full bg-transparent px-3 py-2 text-white placeholder-white/30 focus:outline-none text-center text-base font-bold tracking-widest font-mono"
-                    autoFocus
-                  />
-                  <div className="flex items-center gap-1 pr-1">
-                    {[3, 4, 5, 6].map((s) => (
-                      <button
-                        key={s}
-                        onClick={() => setCustomSize(s.toString())}
-                        className={`px-2.5 py-1 rounded-md text-xs font-mono font-bold border transition-all cursor-pointer
-                          ${parseInt(customSize) === s ? "bg-violet-600 text-white border-violet-400" : "bg-white/5 text-white/60 border-white/10 hover:bg-white/10"}`}
-                      >
-                        {s}x{s}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {useCustom && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              className="flex items-center gap-2.5 p-3 bg-[#060819] border border-white/10 rounded-xl"
+            >
+              <input
+                type="number"
+                min={3}
+                max={6}
+                value={customSize}
+                onChange={(e) => setCustomSize(e.target.value)}
+                placeholder="Size"
+                className="w-full bg-transparent px-3 py-2 text-white placeholder-white/30 focus:outline-none text-center font-bold font-mono text-base"
+                autoFocus
+              />
+              <div className="flex items-center gap-1.5">
+                {[3, 4, 5, 6].map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setCustomSize(s.toString())}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold border transition-all cursor-pointer ${
+                      parseInt(customSize) === s ? "bg-indigo-600 text-white border-indigo-400" : "bg-white/5 text-white/60 border-white/10 hover:bg-white/10"
+                    }`}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          )}
         </div>
 
-        {/* Rule Banner */}
-        <div className="flex items-center gap-3 p-3.5 bg-white/[0.03] border border-white/10 rounded-lg text-xs">
-          <div className="w-7 h-7 rounded-md bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center flex-shrink-0 text-emerald-400">
-            <CheckCircle2 size={16} />
-          </div>
-          <div className="flex flex-col">
-            <span className="text-white/40 text-[10px] font-bold uppercase tracking-wider font-mono">VICTORY THRESHOLD</span>
-            <span className="text-white/90 font-medium">
-              Match target: <strong className="text-violet-300 font-bold">{getWinStreak(finalSize)} IN A ROW</strong> ({finalSize}×{finalSize} grid).
-            </span>
-          </div>
+        {/* Victory Condition Info */}
+        <div className="flex items-center gap-3.5 p-4.5 bg-white/[0.03] border border-white/10 rounded-xl text-xs sm:text-sm">
+          <CheckCircle2 size={18} className="text-indigo-400 flex-shrink-0" />
+          <span className="text-white/80">
+            Win condition: <strong className="text-indigo-300 font-bold">{getWinStreak(finalSize)} IN A ROW</strong> on a {finalSize}×{finalSize} board.
+          </span>
         </div>
 
         {error && (
-          <div className="text-rose-400 text-xs font-medium text-center bg-rose-500/10 border border-rose-500/20 rounded-lg p-3">
+          <div className="text-rose-400 text-xs sm:text-sm font-medium text-center bg-rose-500/10 border border-rose-500/20 rounded-xl p-4">
             {error}
           </div>
         )}
 
-        {/* Launch Room CTA Button */}
-        <button
-          onClick={handleCreate}
-          disabled={loading}
-          className="btn-game-primary w-full mt-1 group"
-        >
-          {loading ? (
-            <><Loader2 size={18} className="animate-spin" /> Creating Room…</>
-          ) : (
-            <>
-              <span>Launch Tic Tac Toe Room</span>
-              <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
-            </>
-          )}
-        </button>
+        <div className="pt-4 border-t border-white/10">
+          <button
+            onClick={handleCreate}
+            disabled={loading}
+            className="btn-game-primary w-full !min-h-[3.375rem] !text-sm sm:!text-base font-bold"
+          >
+            {loading ? (
+              <><Loader2 size={18} className="animate-spin" /> Creating Room…</>
+            ) : (
+              <>Create & Launch Room <ArrowRight size={18} /></>
+            )}
+          </button>
+        </div>
       </div>
-    </Sheet>
+    </ModalSheet>
   );
 }
 
-function CreateRPSSheet({ onClose }) {
+function CreateRPSModal({ onClose }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -299,62 +293,86 @@ function CreateRPSSheet({ onClose }) {
   };
 
   return (
-    <Sheet onClose={onClose} title="Create Rock Paper Scissors" icon={Swords} accentColor="amber">
-      <div className="flex flex-col gap-5">
-        {/* Banner info */}
-        <div className="flex flex-col gap-3 p-4 bg-white/[0.03] border border-white/10 rounded-lg">
-          <div className="flex items-center gap-3">
-            <span className="text-3xl">✊✋✌️</span>
-            <div>
-              <h3 className="text-base font-bold text-white font-display">2-Player Showdown</h3>
-              <p className="text-white/50 text-xs mt-0.5">Simultaneous secret selection & live outcome reveals.</p>
+    <ModalSheet
+      onClose={onClose}
+      title="Create Rock Paper Scissors"
+      subtitle="2-Player head-to-head showdown"
+      icon={Swords}
+      accentColor="amber"
+    >
+      <div className="flex flex-col gap-6 sm:gap-7">
+        {/* Banner Card with generous inner padding & clear separation from outer border */}
+        <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-500/15 border border-amber-500/25 flex items-start sm:items-center gap-4.5 shadow-lg relative overflow-hidden">
+          <div className="w-13 h-13 rounded-2xl bg-amber-500/20 border border-amber-500/35 flex items-center justify-center text-amber-300 flex-shrink-0 shadow-md">
+            <Swords size={24} className="text-amber-400" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <h4 className="text-base sm:text-lg font-extrabold text-white tracking-wide">Instant Showdown Arena</h4>
+            <p className="text-white/70 text-xs sm:text-sm leading-relaxed font-normal">
+              Secret choices revealed simultaneously each round with real-time score tracking!
+            </p>
+          </div>
+        </div>
+
+        {/* Feature List Cards with consistent gap from outer background */}
+        <div className="flex flex-col gap-3.5">
+          <div className="flex items-center gap-4 p-4 sm:p-4.5 rounded-xl bg-white/[0.04] border border-white/10 hover:border-amber-400/30 transition-colors">
+            <div className="w-9 h-9 rounded-lg bg-amber-400/15 border border-amber-400/30 flex items-center justify-center text-amber-300 flex-shrink-0">
+              <Zap size={18} />
+            </div>
+            <div className="flex flex-col text-xs sm:text-sm text-white/80">
+              <strong className="text-white font-semibold">Simultaneous Selection</strong>
+              <span className="text-white/60 text-xs mt-0.5">Choices stay hidden until both players pick.</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4 p-4 sm:p-4.5 rounded-xl bg-white/[0.04] border border-white/10 hover:border-indigo-400/30 transition-colors">
+            <div className="w-9 h-9 rounded-lg bg-indigo-400/15 border border-indigo-400/30 flex items-center justify-center text-indigo-300 flex-shrink-0">
+              <Trophy size={18} />
+            </div>
+            <div className="flex flex-col text-xs sm:text-sm text-white/80">
+              <strong className="text-white font-semibold">Live Scoreboard</strong>
+              <span className="text-white/60 text-xs mt-0.5">Real-time round counter and win tally.</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4 p-4 sm:p-4.5 rounded-xl bg-white/[0.04] border border-white/10 hover:border-rose-400/30 transition-colors">
+            <div className="w-9 h-9 rounded-lg bg-rose-400/15 border border-rose-400/30 flex items-center justify-center text-rose-300 flex-shrink-0">
+              <Smile size={18} />
+            </div>
+            <div className="flex flex-col text-xs sm:text-sm text-white/80">
+              <strong className="text-white font-semibold">Live Animated Reactions</strong>
+              <span className="text-white/60 text-xs mt-0.5">Express yourself with floating live emotes.</span>
             </div>
           </div>
         </div>
 
-        {/* Feature List */}
-        <div className="space-y-2 text-xs text-white/80 font-medium">
-          <div className="flex items-center gap-2.5 p-2.5 rounded-lg bg-white/[0.02] border border-white/10">
-            <span className="w-2 h-2 rounded-full bg-amber-400" />
-            <span><strong>Secret Selection:</strong> Choices are locked until both players submit.</span>
-          </div>
-          <div className="flex items-center gap-2.5 p-2.5 rounded-lg bg-white/[0.02] border border-white/10">
-            <span className="w-2 h-2 rounded-full bg-cyan-400" />
-            <span><strong>Live Scoreboard:</strong> Play endless rounds with automatic score tracking.</span>
-          </div>
-          <div className="flex items-center gap-2.5 p-2.5 rounded-lg bg-white/[0.02] border border-white/10">
-            <span className="w-2 h-2 rounded-full bg-rose-400" />
-            <span><strong>Live Reactions:</strong> Express yourself with real-time animated emojis.</span>
-          </div>
-        </div>
-
         {error && (
-          <div className="text-rose-400 text-xs font-medium text-center bg-rose-500/10 border border-rose-500/20 rounded-lg p-3">
+          <div className="text-rose-400 text-xs sm:text-sm font-medium text-center bg-rose-500/10 border border-rose-500/20 rounded-xl p-4">
             {error}
           </div>
         )}
 
-        {/* Launch Room CTA Button */}
-        <button
-          onClick={handleCreate}
-          disabled={loading}
-          className="btn-game-primary !bg-gradient-to-r !from-amber-500 !to-orange-600 hover:!from-amber-400 hover:!to-orange-500 !text-black font-extrabold w-full mt-1 group"
-        >
-          {loading ? (
-            <><Loader2 size={18} className="animate-spin" /> Launching RPS Room…</>
-          ) : (
-            <>
-              <span>Launch RPS Arena Room</span>
-              <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
-            </>
-          )}
-        </button>
+        {/* CTA Launch Section with Clean Separation */}
+        <div className="pt-4 sm:pt-5 border-t border-white/10">
+          <button
+            onClick={handleCreate}
+            disabled={loading}
+            className="btn-game-primary btn-game-amber w-full !min-h-[3.375rem] !text-sm sm:!text-base font-bold shadow-lg"
+          >
+            {loading ? (
+              <><Loader2 size={18} className="animate-spin" /> Launching RPS Arena…</>
+            ) : (
+              <>Launch RPS Room <ArrowRight size={18} /></>
+            )}
+          </button>
+        </div>
       </div>
-    </Sheet>
+    </ModalSheet>
   );
 }
 
-function JoinGameSheet({ onClose }) {
+function JoinGameModal({ onClose }) {
   const router = useRouter();
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
@@ -366,19 +384,17 @@ function JoinGameSheet({ onClose }) {
     setLoading(true);
     setError("");
     try {
-      const { get, update } = await import("firebase/database");
       const snapshot = await get(roomRef(trimmed));
-      if (!snapshot.exists()) { setError("Room not found — check the code!"); setLoading(false); return; }
+      if (!snapshot.exists()) { setError("Room not found — double check your code"); setLoading(false); return; }
       const room = snapshot.val();
       
-      // Determine if RPS room or Tic-Tac-Toe room
       if (room.gameType === "rps") {
-        if (room.players?.P2?.connected) { setError("RPS Room is full! Both players are connected."); setLoading(false); return; }
+        if (room.players?.P2?.connected) { setError("RPS Room is full!"); setLoading(false); return; }
         await update(roomRef(trimmed), { "players/P2/connected": true, status: "playing" });
         router.push(`/rps/${trimmed}?player=P2`);
       } else {
         if (room.status === "finished") { setError("This game has already ended."); setLoading(false); return; }
-        if (room.players?.O?.connected) { setError("Room is full! Both players are connected."); setLoading(false); return; }
+        if (room.players?.O?.connected) { setError("Tic-Tac-Toe Room is full!"); setLoading(false); return; }
         await update(roomRef(trimmed), { "players/O/connected": true, status: "playing" });
         router.push(`/room/${trimmed}?symbol=O`);
       }
@@ -389,11 +405,17 @@ function JoinGameSheet({ onClose }) {
   };
 
   return (
-    <Sheet onClose={onClose} title="Join Game Room" icon={Users} accentColor="rose">
-      <div className="flex flex-col gap-5">
+    <ModalSheet
+      onClose={onClose}
+      title="Join Room with Code"
+      subtitle="Enter a 6-character room code"
+      icon={Users}
+      accentColor="rose"
+    >
+      <div className="flex flex-col gap-6 sm:gap-7">
         <div>
-          <label className="block text-white/50 text-xs font-bold uppercase tracking-wider mb-2">
-            Enter 6-Character Room Code
+          <label className="block text-white/60 text-xs sm:text-sm font-semibold uppercase tracking-wider mb-3">
+            Room Code
           </label>
           <input
             type="text"
@@ -402,213 +424,281 @@ function JoinGameSheet({ onClose }) {
             onChange={(e) => { setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "")); setError(""); }}
             onKeyDown={(e) => e.key === "Enter" && handleJoin()}
             placeholder="XXXXXX"
-            className="w-full bg-[#080a1e] border border-white/20 rounded-lg px-4 py-3.5
-              text-white placeholder-white/20 focus:outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-400
-              text-center text-3xl sm:text-4xl font-black tracking-[0.3em] font-mono uppercase
-              transition-all duration-150"
+            className="w-full bg-[#060819] border border-white/20 rounded-xl px-6 py-4.5
+              text-white placeholder-white/20 focus:outline-none focus:border-rose-400 focus:ring-2 focus:ring-rose-400/20
+              text-center text-3xl sm:text-4xl font-bold font-mono tracking-[0.3em] uppercase transition-all"
             autoFocus
           />
         </div>
 
         {error && (
-          <div className="text-rose-400 text-xs font-medium text-center bg-rose-500/10 border border-rose-500/20 rounded-lg p-3">
+          <div className="text-rose-400 text-xs sm:text-sm font-medium text-center bg-rose-500/10 border border-rose-500/20 rounded-xl p-4">
             {error}
           </div>
         )}
 
-        <p className="text-white/50 text-xs text-center font-medium leading-relaxed">
-          Supports room codes for both <strong>Tic Tac Toe</strong> & <strong>Rock Paper Scissors Duo</strong>.
+        <p className="text-white/50 text-xs sm:text-sm text-center leading-relaxed">
+          Works for both <strong>Tic-Tac-Toe</strong> & <strong>Rock Paper Scissors Duo</strong> matches.
         </p>
 
-        <button
-          onClick={handleJoin}
-          disabled={loading || code.length < 4}
-          className="btn-game-primary btn-game-rose w-full mt-1"
-        >
-          {loading ? (
-            <><Loader2 size={18} className="animate-spin" /> Connecting…</>
-          ) : (
-            <><ArrowRight size={18} /> Join Room</>
-          )}
-        </button>
+        <div className="pt-3 border-t border-white/10">
+          <button
+            onClick={handleJoin}
+            disabled={loading || code.length < 4}
+            className="btn-game-primary btn-game-rose w-full !min-h-[3.25rem] !text-sm sm:!text-base font-bold"
+          >
+            {loading ? (
+              <><Loader2 size={18} className="animate-spin" /> Joining Room…</>
+            ) : (
+              <>Join Room <ArrowRight size={18} /></>
+            )}
+          </button>
+        </div>
       </div>
-    </Sheet>
+    </ModalSheet>
   );
 }
 
 export default function HomePage() {
-  const [modal, setModal] = useState(null);
+  const [activeModal, setActiveModal] = useState(null);
+  const [quickCode, setQuickCode] = useState("");
+  const [quickError, setQuickError] = useState("");
+  const [quickLoading, setQuickLoading] = useState(false);
+  const router = useRouter();
 
-  const features = [
-    { icon: Zap, label: "Real-time sync", color: "text-violet-400", bg: "bg-violet-500/10" },
-    { icon: Swords, label: "RPS & Tic-Tac-Toe", color: "text-amber-400", bg: "bg-amber-500/10" },
-    { icon: Smile, label: "Live reactions", color: "text-rose-400", bg: "bg-rose-500/10" },
-    { icon: Trophy, label: "Live Scoreboard", color: "text-cyan-400", bg: "bg-cyan-500/10" },
+  const handleQuickJoin = async (e) => {
+    e.preventDefault();
+    const trimmed = quickCode.trim().toUpperCase();
+    if (trimmed.length < 4) {
+      setQuickError("Enter a valid 6-character room code");
+      return;
+    }
+    setQuickLoading(true);
+    setQuickError("");
+    try {
+      const snapshot = await get(roomRef(trimmed));
+      if (!snapshot.exists()) {
+        setQuickError("Room not found");
+        setQuickLoading(false);
+        return;
+      }
+      const room = snapshot.val();
+      if (room.gameType === "rps") {
+        if (room.players?.P2?.connected) { setQuickError("Room is full"); setQuickLoading(false); return; }
+        await update(roomRef(trimmed), { "players/P2/connected": true, status: "playing" });
+        router.push(`/rps/${trimmed}?player=P2`);
+      } else {
+        if (room.status === "finished") { setQuickError("Game has ended"); setQuickLoading(false); return; }
+        if (room.players?.O?.connected) { setQuickError("Room is full"); setQuickLoading(false); return; }
+        await update(roomRef(trimmed), { "players/O/connected": true, status: "playing" });
+        router.push(`/room/${trimmed}?symbol=O`);
+      }
+    } catch {
+      setQuickError("Failed to connect");
+      setQuickLoading(false);
+    }
+  };
+
+  const highlights = [
+    { icon: Zap, label: "Realtime Sync", desc: "Instant moves via Firebase DB", color: "text-indigo-400", bg: "bg-indigo-500/10" },
+    { icon: Grid, label: "Custom Grids", desc: "3×3 up to 6×6 arenas", color: "text-purple-400", bg: "bg-purple-500/10" },
+    { icon: Swords, label: "RPS Showdowns", desc: "Secret simultaneous reveals", color: "text-amber-400", bg: "bg-amber-500/10" },
+    { icon: Smile, label: "Live Emojis", desc: "Realtime animated reactions", color: "text-rose-400", bg: "bg-rose-500/10" },
   ];
 
   return (
-    <main className="relative min-h-[100dvh] flex flex-col items-center justify-center overflow-hidden bg-game-grid px-4 py-10 sm:px-6 sm:py-16">
-      {/* Glow Orbs */}
-      <FloatingOrb className="w-[450px] h-[450px] bg-violet-600 top-[-15%] left-[-15%]" delay={0} />
-      <FloatingOrb className="w-[400px] h-[400px] bg-rose-600 bottom-[-15%] right-[-15%]" delay={2.5} />
-      <FloatingOrb className="w-[300px] h-[300px] bg-amber-600 top-[40%] right-[10%]" delay={4.5} />
+    <main className="relative min-h-[100dvh] bg-game-grid flex flex-col justify-between items-center overflow-x-hidden">
+      {/* Subtle Background Glows */}
+      <FloatingOrb className="w-[500px] h-[500px] bg-indigo-600/25 -top-32 left-1/2 -translate-x-1/2" delay={0} />
+      <FloatingOrb className="w-[400px] h-[400px] bg-rose-600/15 bottom-10 right-10" delay={3} />
 
-      <div className="relative z-10 flex flex-col items-center gap-6 sm:gap-8 text-center w-full max-w-sm sm:max-w-xl">
-
-        {/* Header Badge & Title */}
-        <motion.div
-          initial={{ opacity: 0, y: -16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-          className="flex flex-col items-center gap-3.5"
-        >
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-white/5 border border-white/10 text-violet-300 text-xs font-bold tracking-widest uppercase">
-            <Sparkles size={12} className="text-amber-400" />
-            <span>MULTIPLAYER GAME ARENA V2.5</span>
-          </div>
-
-          <div className="space-y-2">
-            <h1 className="text-4xl sm:text-5xl font-black tracking-tight leading-none font-display">
-              <span className="text-white">DUO</span>
-              <span className="bg-gradient-to-r from-violet-400 via-fuchsia-400 to-amber-400 bg-clip-text text-transparent px-2">BATTLE</span>
-              <span className="text-white">HUB</span>
-            </h1>
-            <p className="text-white/60 text-xs sm:text-sm font-medium max-w-sm mx-auto leading-relaxed">
-              Play multiplayer Tic-Tac-Toe or challenge friends in fast-paced Rock Paper Scissors Duo!
-            </p>
-          </div>
-        </motion.div>
-
-        {/* Feature Badges Grid */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-          className="grid grid-cols-2 gap-2.5 sm:gap-3 w-full"
-        >
-          {features.map(({ icon: Icon, label, color, bg }) => (
-            <div
-              key={label}
-              className="flex items-center gap-2.5 px-3 py-2.5 sm:px-3.5 sm:py-3 rounded-lg border bg-[#0d0f26]/80 border-white/10 backdrop-blur-md shadow-sm"
-            >
-              <div className={`p-1.5 rounded-md ${bg}`}>
-                <Icon size={15} className={color} />
-              </div>
-              <span className="text-white/80 text-xs font-semibold tracking-wide truncate">{label}</span>
+      {/* Top Navbar */}
+      <header className="relative z-20 w-full border-b border-white/10 bg-[#070918]/80 backdrop-blur-md px-4 sm:px-8 py-4">
+        <div className="max-w-5xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
+              <Play size={16} fill="currentColor" className="ml-0.5" />
             </div>
-          ))}
-        </motion.div>
-
-        {/* Section Header */}
-        <div className="w-full flex items-center justify-between border-b border-white/10 pb-2.5 pt-1 my-1">
-          <span className="text-[11px] font-extrabold uppercase tracking-wider text-white/50 font-mono">
-            CHOOSE GAME MODE OR JOIN
-          </span>
-          <span className="text-[11px] text-violet-300 font-mono font-bold">2-Player Multiplayer</span>
-        </div>
-
-        {/* Game Mode Cards */}
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.25 }}
-          className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full"
-        >
-          {/* Card 1: Tic Tac Toe */}
-          <div className="flex flex-col text-left p-5 sm:p-6 rounded-xl border border-white/10 bg-[#0d0f26]/80 hover:border-violet-500/50 hover:bg-[#121535]/90 transition-all duration-200 group relative shadow-lg">
-            {/* Header info */}
-            <div className="flex items-center justify-between mb-3.5">
-              <div className="w-10 h-10 rounded-lg bg-violet-500/10 flex items-center justify-center text-violet-300 text-xl font-bold font-display">
-                ❌⭕
-              </div>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white/5 border border-white/10 text-white/60 uppercase font-mono">
-                3x3 to 6x6
+            <div className="flex items-center gap-2.5">
+              <span className="text-base font-extrabold tracking-tight text-white font-display">
+                DUO<span className="text-indigo-400">BATTLE</span>
+              </span>
+              <span className="hidden sm:inline-flex items-center gap-1.5 text-[10px] font-mono text-emerald-400 px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Live Arena
               </span>
             </div>
-            
-            <h3 className="text-base font-bold text-white font-display group-hover:text-violet-300 transition-colors">
-              Tic Tac Toe Arena
-            </h3>
-            <p className="text-xs text-white/50 font-medium mt-1 mb-5 leading-relaxed">
-              Classic and expanded grid tactical battle with custom win streaks.
-            </p>
+          </div>
 
-            {/* Inner padded button */}
-            <div className="mt-auto pt-3 border-t border-white/10">
+          <button
+            onClick={() => setActiveModal("join")}
+            className="btn-game-secondary"
+          >
+            <Users size={14} /> Join with Code
+          </button>
+        </div>
+      </header>
+
+      {/* Centered Main Page Body */}
+      <div className="relative z-10 w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 flex flex-col items-center gap-10 sm:gap-14 my-auto">
+        
+        {/* Hero Section */}
+        <section className="text-center flex flex-col items-center gap-4 max-w-2xl">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-md bg-white/5 border border-white/10 text-indigo-300 text-xs font-semibold tracking-wide">
+            <Sparkles size={13} className="text-amber-400" />
+            <span>2-Player Realtime Multiplayer</span>
+          </div>
+
+          <h1 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight leading-tight">
+            Play Fast Online Games <br className="hidden sm:block" />
+            <span className="bg-gradient-to-r from-indigo-300 via-purple-300 to-amber-300 bg-clip-text text-transparent">
+              With Anyone, Anywhere
+            </span>
+          </h1>
+
+          <p className="text-white/60 text-sm sm:text-base font-normal leading-relaxed max-w-lg">
+            Host custom game lobbies or join instantly using a 6-character room code. Fast, real-time multiplayer right in your browser.
+          </p>
+        </section>
+
+        {/* Quick Join Input Section */}
+        <section className="w-full max-w-lg">
+          <form onSubmit={handleQuickJoin} className="game-panel !p-3 sm:!p-3.5 flex items-center gap-3 shadow-xl border border-white/15">
+            <input
+              type="text"
+              maxLength={6}
+              value={quickCode}
+              onChange={(e) => {
+                setQuickCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""));
+                setQuickError("");
+              }}
+              placeholder="ENTER ROOM CODE"
+              className="w-full bg-transparent px-4 py-2.5 text-white placeholder-white/30 focus:outline-none text-center font-mono font-extrabold text-sm tracking-widest uppercase"
+            />
+            <button
+              type="submit"
+              disabled={quickLoading || quickCode.length < 4}
+              className="btn-game-primary btn-game-rose !min-h-[2.875rem] !py-2.5 !px-6 !text-xs whitespace-nowrap flex-shrink-0"
+            >
+              {quickLoading ? <Loader2 size={16} className="animate-spin" /> : <>Join <ArrowRight size={14} /></>}
+            </button>
+          </form>
+          {quickError && (
+            <p className="text-rose-400 text-xs font-medium text-center mt-2.5">{quickError}</p>
+          )}
+        </section>
+        
+        {/* Game Mode Cards Grid */}
+        <section className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 w-full">
+          
+          {/* Card 1: Tic Tac Toe Arena */}
+          <div className="game-panel p-7 sm:p-9 flex flex-col justify-between border border-white/10 hover:border-indigo-500/40 hover:bg-[#0e122b]/95 transition-all duration-300 group">
+            <div>
+              {/* Card Header & Custom Vector Icon */}
+              <div className="flex items-center justify-between mb-7">
+                <div className="w-13 h-13 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 text-indigo-400 flex items-center justify-center shadow-md flex-shrink-0">
+                  <div className="grid grid-cols-2 gap-1.5 p-1">
+                    <X size={15} className="text-indigo-400 stroke-[3]" />
+                    <Circle size={15} className="text-purple-400 stroke-[3]" />
+                    <Circle size={15} className="text-purple-400 stroke-[3]" />
+                    <X size={15} className="text-indigo-400 stroke-[3]" />
+                  </div>
+                </div>
+                <span className="text-xs font-semibold font-mono text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-3.5 py-1.5 rounded-md">
+                  3×3 to 6×6
+                </span>
+              </div>
+
+              <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight group-hover:text-indigo-300 transition-colors">
+                Tic-Tac-Toe Arena
+              </h2>
+              <p className="text-white/60 text-xs sm:text-sm mt-3 leading-relaxed font-normal">
+                Strategic turn-based tactical battles on classic 3×3 or expanded 4×4, 5×5, and 6×6 boards with custom win streak targets.
+              </p>
+            </div>
+
+            <div className="mt-9 pt-6 border-t border-white/10">
               <button
-                onClick={() => setModal("create-tictactoe")}
-                className="w-full py-2.5 px-3 rounded-lg bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 text-violet-200 font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                onClick={() => setActiveModal("create-tictactoe")}
+                className="btn-game-primary w-full !min-h-[3.25rem] !text-sm sm:!text-base"
               >
-                <Gamepad2 size={15} /> Create Room
+                <Gamepad2 size={18} /> Create Tic Tac Toe Room
               </button>
             </div>
           </div>
 
           {/* Card 2: Rock Paper Scissors Duo */}
-          <div className="flex flex-col text-left p-5 sm:p-6 rounded-xl border border-white/10 bg-[#0d0f26]/80 hover:border-amber-500/50 hover:bg-[#19142b]/90 transition-all duration-200 group relative shadow-lg">
-            {/* Header info */}
-            <div className="flex items-center justify-between mb-3.5">
-              <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-300 text-lg">
-                ✊✋✌️
+          <div className="game-panel p-7 sm:p-9 flex flex-col justify-between border border-white/10 hover:border-amber-500/40 hover:bg-[#14122b]/95 transition-all duration-300 group">
+            <div>
+              {/* Card Header & Custom Vector Icon */}
+              <div className="flex items-center justify-between mb-7">
+                <div className="w-13 h-13 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30 text-amber-400 flex items-center justify-center shadow-md flex-shrink-0">
+                  <Swords size={24} className="text-amber-400 stroke-[2.2]" />
+                </div>
+                <span className="text-xs font-semibold font-mono text-amber-300 bg-amber-500/10 border border-amber-500/20 px-3.5 py-1.5 rounded-md">
+                  2-Player Showdown
+                </span>
               </div>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300 uppercase font-mono">
-                NEW MODE
-              </span>
+
+              <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight group-hover:text-amber-300 transition-colors">
+                Rock Paper Scissors Duo
+              </h2>
+              <p className="text-white/60 text-xs sm:text-sm mt-3 leading-relaxed font-normal">
+                Simultaneous secret choice locking, instant round outcome reveals, endless score tracking, and animated emoji reactions.
+              </p>
             </div>
 
-            <h3 className="text-base font-bold text-white font-display group-hover:text-amber-300 transition-colors">
-              Rock Paper Scissors Duo
-            </h3>
-            <p className="text-xs text-white/50 font-medium mt-1 mb-5 leading-relaxed">
-              2-player simultaneous secret moves & instant reveal showdowns.
-            </p>
-
-            {/* Inner padded button */}
-            <div className="mt-auto pt-3 border-t border-white/10">
+            <div className="mt-9 pt-6 border-t border-white/10">
               <button
-                onClick={() => setModal("create-rps")}
-                className="w-full py-2.5 px-3 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-200 font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                onClick={() => setActiveModal("create-rps")}
+                className="btn-game-primary btn-game-amber w-full !min-h-[3.25rem] !text-sm sm:!text-base"
               >
-                <Swords size={15} /> Create RPS Room
+                <Flame size={18} /> Create RPS Room
               </button>
             </div>
           </div>
-        </motion.div>
 
-        {/* PROMINENT JOIN ROOM CTA BUTTON */}
-        <motion.div
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.35 }}
-          className="w-full flex flex-col gap-2 pt-1"
-        >
-          <button
-            onClick={() => setModal("join")}
-            className="btn-game-primary btn-game-rose w-full text-sm sm:text-base tracking-wider shadow-lg"
-          >
-            <Users size={20} />
-            <span>JOIN ROOM WITH CODE</span>
-          </button>
-          <span className="text-white/40 text-[11px] font-mono">
-            Enter a 6-character room code to join an active Tic-Tac-Toe or RPS Duo match
-          </span>
-        </motion.div>
+        </section>
 
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.5 }}
-          className="text-white/30 text-xs tracking-wider font-mono pt-2"
-        >
-          Next.js · Firebase Realtime DB · Framer Motion
-        </motion.p>
+        {/* Feature Highlights Grid */}
+        <section className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-5 w-full">
+          {highlights.map(({ icon: Icon, label, desc, color, bg }) => (
+            <div key={label} className="game-panel p-5 sm:p-6 flex flex-col gap-3 border border-white/5">
+              <div className={`w-9 h-9 rounded-lg ${bg} flex items-center justify-center flex-shrink-0`}>
+                <Icon size={17} className={color} />
+              </div>
+              <div>
+                <h3 className="text-xs sm:text-sm font-bold text-white">{label}</h3>
+                <p className="text-white/50 text-[11px] sm:text-xs mt-1 leading-snug">{desc}</p>
+              </div>
+            </div>
+          ))}
+        </section>
+
       </div>
+
+      {/* Footer */}
+      <footer className="relative z-20 w-full border-t border-white/10 bg-[#070918]/80 px-4 py-5 text-center">
+        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-white/40">
+          <div className="flex items-center gap-2">
+            <Globe2 size={14} className="text-indigo-400" />
+            <span>Fast Realtime Synchronization Powered by Firebase DB</span>
+          </div>
+          <span className="font-mono text-[11px]">DuoBattle Hub · Online Multiplayer</span>
+        </div>
+      </footer>
 
       {/* Modals */}
       <AnimatePresence mode="wait">
-        {modal === "create-tictactoe" && <CreateTicTacToeSheet onClose={() => setModal(null)} />}
-        {modal === "create-rps" && <CreateRPSSheet onClose={() => setModal(null)} />}
-        {modal === "join" && <JoinGameSheet onClose={() => setModal(null)} />}
+        {activeModal === "create-tictactoe" && (
+          <CreateTicTacToeModal onClose={() => setActiveModal(null)} />
+        )}
+        {activeModal === "create-rps" && (
+          <CreateRPSModal onClose={() => setActiveModal(null)} />
+        )}
+        {activeModal === "join" && (
+          <JoinGameModal onClose={() => setActiveModal(null)} />
+        )}
       </AnimatePresence>
     </main>
   );

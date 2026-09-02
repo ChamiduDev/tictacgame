@@ -23,7 +23,7 @@ export default function RPSBoard({
   const isRevealed = status === "revealed" && roundResult;
 
   return (
-    <div className="w-full max-w-[min(92vw,480px)] mx-auto p-4 sm:p-6 bg-[#0a0c1e]/90 border border-white/15 rounded-2xl backdrop-blur-2xl shadow-[0_24px_60px_-8px_rgba(0,0,0,0.85)] relative overflow-hidden flex flex-col justify-between gap-5 min-h-[380px]">
+    <div className="w-full max-w-[min(92vw,480px)] mx-auto p-6 sm:p-8 bg-[#0a0c1e]/90 border border-white/15 rounded-2xl backdrop-blur-2xl shadow-[0_24px_60px_-8px_rgba(0,0,0,0.85)] relative overflow-hidden flex flex-col justify-between gap-6 min-h-[400px]">
       
       {/* Background ambient lighting */}
       <div className="absolute inset-0 pointer-events-none -z-10">

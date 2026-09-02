@@ -31,14 +31,14 @@ function RPSPlayerCard({ playerId, label, connected, hasChosen, score, isMe, sta
   return (
     <div
       className={`
-        relative flex-1 flex items-center justify-between px-3.5 py-3 sm:px-4 sm:py-3.5 rounded-xl
+        relative flex-1 flex items-center justify-between px-4 py-3.5 sm:px-5 sm:py-4 rounded-xl
         bg-gradient-to-r ${theme.bg} border backdrop-blur-md transition-all duration-300
         ${connected ? (hasChosen ? theme.activeBorder : theme.border) : `${theme.border} opacity-75`}
       `}
     >
       {/* Player info */}
-      <div className="flex items-center gap-3 min-w-0">
-        <div className={`w-9 h-9 sm:w-11 sm:h-11 rounded-xl border flex items-center justify-center text-xl sm:text-2xl flex-shrink-0 ${theme.boxBg}`}>
+      <div className="flex items-center gap-3.5 min-w-0">
+        <div className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl border flex items-center justify-center text-xl sm:text-2xl flex-shrink-0 ${theme.boxBg}`}>
           {theme.avatar}
         </div>
         <div className="flex flex-col truncate">
@@ -71,7 +71,7 @@ function RPSPlayerCard({ playerId, label, connected, hasChosen, score, isMe, sta
       </div>
 
       {/* Score Pill */}
-      <div className="flex flex-col items-end flex-shrink-0 pl-2">
+      <div className="flex flex-col items-end flex-shrink-0 pl-3">
         <span className="text-[10px] font-extrabold uppercase tracking-widest text-white/40">SCORE</span>
         <span className={`text-lg sm:text-xl font-black font-mono ${theme.text}`}>
           {score ?? 0}

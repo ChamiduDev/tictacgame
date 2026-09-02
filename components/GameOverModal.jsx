@@ -97,9 +97,9 @@ export default function GameOverModal({ winner, mySymbol, gridSize, onPlayAgain,
 
       {/* Modal Card */}
       <motion.div
-        className={`relative z-10 flex flex-col items-center gap-6 p-7 sm:p-8 rounded-2xl
+        className={`relative z-10 flex flex-col items-center gap-6 p-7 sm:p-9 rounded-2xl
           bg-gradient-to-b ${theme.bg} border ${theme.border}
-          backdrop-blur-2xl max-w-sm sm:max-w-md w-full text-center overflow-hidden`}
+          backdrop-blur-2xl max-w-sm sm:max-w-md w-full text-center overflow-hidden shadow-2xl`}
         initial={{ scale: 0.85, opacity: 0, y: 15 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         exit={{ scale: 0.85, opacity: 0, y: 15 }}
@@ -115,24 +115,24 @@ export default function GameOverModal({ winner, mySymbol, gridSize, onPlayAgain,
           initial={{ scale: 0, rotate: -20 }}
           animate={{ scale: 1, rotate: 0 }}
           transition={{ delay: 0.12, type: "spring", stiffness: 400 }}
-          className={`w-16 h-16 sm:w-18 sm:h-18 rounded-2xl border flex items-center justify-center ${theme.iconBg}`}
+          className={`w-16 h-16 sm:w-18 sm:h-18 rounded-2xl border flex items-center justify-center ${theme.iconBg} shadow-md`}
         >
           {icon}
         </motion.div>
 
         {/* Header Text */}
-        <div className="space-y-2">
+        <div className="space-y-2 px-2">
           <h2 className="text-3xl sm:text-4xl font-black text-white font-display tracking-wider">{title}</h2>
           <p className="text-white/60 text-sm sm:text-base font-medium max-w-xs mx-auto leading-relaxed">{subtitle}</p>
         </div>
 
         {/* Board tag */}
-        <div className="px-4 py-1.5 bg-white/[0.06] border border-white/12 rounded-lg text-xs font-bold text-white/80 font-mono tracking-wider">
+        <div className="px-4 py-2 bg-white/[0.06] border border-white/12 rounded-xl text-xs font-bold text-white/80 font-mono tracking-wider">
           {gridSize}×{gridSize} MATCH FINISHED
         </div>
 
         {/* Actions */}
-        <div className="flex flex-col sm:flex-row gap-3 sm:gap-3.5 w-full mt-2">
+        <div className="flex flex-col sm:flex-row gap-3.5 w-full mt-3">
           <button
             onClick={onPlayAgain}
             className={`btn-game-primary flex-1 text-sm sm:text-base ${
