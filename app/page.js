@@ -27,6 +27,7 @@ import {
   Flame,
   Globe2,
   Crown,
+  Triangle,
 } from "lucide-react";
 
 const GRID_OPTIONS = [
@@ -483,6 +484,110 @@ function CreateKQBattleModal({ onClose }) {
   );
 }
 
+function CreateTrianglesModal({ onClose }) {
+  const router = useRouter();
+  const [selectedSize, setSelectedSize] = useState(4);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleCreate = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const roomId = generateRoomCode();
+      await set(roomRef(roomId), {
+        gameType: "triangles",
+        gridSize: selectedSize,
+        status: "waiting",
+        lines: {},
+        triangles: {},
+        scores: { P1: 0, P2: 0 },
+        currentTurn: "P1",
+        players: { P1: { connected: true }, P2: { connected: false } },
+        winner: null,
+        emoji: null,
+        createdAt: Date.now(),
+      });
+      router.push(`/triangles/${roomId}?player=P1`);
+    } catch {
+      setError("Failed to create Tricky Triangles room. Check your Firebase config.");
+      setLoading(false);
+    }
+  };
+
+  const options = [
+    { size: 3, label: "Small (9 Δ)", desc: "Quick match (~2 mins)" },
+    { size: 4, label: "Medium (16 Δ)", desc: "Standard arena (~4 mins)" },
+    { size: 5, label: "Large (25 Δ)", desc: "Strategic battle (~6 mins)" },
+  ];
+
+  return (
+    <ModalSheet
+      onClose={onClose}
+      title="Create Tricky Triangles"
+      subtitle="Connect dots & claim triangles for points"
+      icon={Triangle}
+      accentColor="indigo"
+    >
+      <div className="flex flex-col gap-6 sm:gap-7">
+        <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-r from-cyan-500/15 via-blue-500/10 to-indigo-500/15 border border-cyan-500/25 flex items-start sm:items-center gap-4.5 shadow-lg relative overflow-hidden">
+          <div className="w-13 h-13 rounded-2xl bg-cyan-500/20 border border-cyan-500/35 flex items-center justify-center text-cyan-300 flex-shrink-0 shadow-md text-2xl">
+            🔺
+          </div>
+          <div className="flex flex-col gap-1">
+            <h4 className="text-base sm:text-lg font-extrabold text-white tracking-wide">PvP Triangle Grid Showdown</h4>
+            <p className="text-white/70 text-xs sm:text-sm leading-relaxed font-normal">
+              Connect dots turn by turn. Completing a 3-sided triangle claims it and awards a point + extra turn!
+            </p>
+          </div>
+        </div>
+
+        <div>
+          <span className="block text-white/60 text-xs font-semibold uppercase tracking-wider mb-3">
+            Select Grid Size
+          </span>
+          <div className="grid grid-cols-3 gap-3">
+            {options.map(({ size, label, desc }) => (
+              <button
+                key={size}
+                onClick={() => setSelectedSize(size)}
+                className={`flex flex-col p-3.5 sm:p-4 rounded-xl border text-left transition-all cursor-pointer ${
+                  selectedSize === size
+                    ? "border-cyan-500 bg-cyan-500/20 text-white shadow-md shadow-cyan-500/10"
+                    : "border-white/10 bg-white/[0.03] hover:bg-white/[0.07] text-white/70"
+                }`}
+              >
+                <span className="text-sm font-bold text-white font-mono">{label}</span>
+                <span className="text-[11px] text-white/50 mt-1">{desc}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {error && (
+          <div className="text-rose-400 text-xs sm:text-sm font-medium text-center bg-rose-500/10 border border-rose-500/20 rounded-xl p-4">
+            {error}
+          </div>
+        )}
+
+        <div className="pt-4 border-t border-white/10">
+          <button
+            onClick={handleCreate}
+            disabled={loading}
+            className="btn-game-primary w-full !min-h-[3.375rem] !text-sm sm:!text-base font-bold shadow-lg"
+          >
+            {loading ? (
+              <><Loader2 size={18} className="animate-spin" /> Launching Triangles Room…</>
+            ) : (
+              <>Launch Triangles Room <ArrowRight size={18} /></>
+            )}
+          </button>
+        </div>
+      </div>
+    </ModalSheet>
+  );
+}
+
 function JoinGameModal({ onClose }) {
   const router = useRouter();
   const [code, setCode] = useState("");
@@ -499,7 +604,11 @@ function JoinGameModal({ onClose }) {
       if (!snapshot.exists()) { setError("Room not found — double check your code"); setLoading(false); return; }
       const room = snapshot.val();
       
-      if (room.gameType === "kqbattle") {
+      if (room.gameType === "triangles") {
+        if (room.players?.P2?.connected) { setError("Tricky Triangles Room is full!"); setLoading(false); return; }
+        await update(roomRef(trimmed), { "players/P2/connected": true, status: "playing" });
+        router.push(`/triangles/${trimmed}?player=P2`);
+      } else if (room.gameType === "kqbattle") {
         if (room.players?.P2?.connected) { setError("King & Queen Battle Room is full!"); setLoading(false); return; }
         await update(roomRef(trimmed), { "players/P2/connected": true });
         router.push(`/kqbattle/${trimmed}?player=P2`);
@@ -553,7 +662,7 @@ function JoinGameModal({ onClose }) {
         )}
 
         <p className="text-white/50 text-xs sm:text-sm text-center leading-relaxed">
-          Works for <strong>Tic-Tac-Toe</strong>, <strong>Rock Paper Scissors</strong> & <strong>King & Queen Grid Battle</strong> matches.
+          Works for <strong>Tic-Tac-Toe</strong>, <strong>Rock Paper Scissors</strong>, <strong>King & Queen</strong> & <strong>Tricky Triangles</strong> matches.
         </p>
 
         <div className="pt-3 border-t border-white/10">
@@ -598,7 +707,11 @@ export default function HomePage() {
         return;
       }
       const room = snapshot.val();
-      if (room.gameType === "kqbattle") {
+      if (room.gameType === "triangles") {
+        if (room.players?.P2?.connected) { setQuickError("Room is full"); setQuickLoading(false); return; }
+        await update(roomRef(trimmed), { "players/P2/connected": true, status: "playing" });
+        router.push(`/triangles/${trimmed}?player=P2`);
+      } else if (room.gameType === "kqbattle") {
         if (room.players?.P2?.connected) { setQuickError("Room is full"); setQuickLoading(false); return; }
         await update(roomRef(trimmed), { "players/P2/connected": true });
         router.push(`/kqbattle/${trimmed}?player=P2`);
@@ -708,102 +821,133 @@ export default function HomePage() {
         </section>
         
         {/* Game Mode Cards Grid */}
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-7 w-full">
+        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-7 w-full">
           
           {/* Card 1: Tic Tac Toe Arena */}
-          <div className="game-panel p-7 sm:p-8 flex flex-col justify-between border border-white/10 hover:border-indigo-500/40 hover:bg-[#0e122b]/95 transition-all duration-300 group">
+          <div className="game-panel p-6 sm:p-7 flex flex-col justify-between border border-white/10 hover:border-indigo-500/40 hover:bg-[#0e122b]/95 transition-all duration-300 group">
             <div>
               {/* Card Header & Custom Vector Icon */}
               <div className="flex items-center justify-between mb-6">
-                <div className="w-13 h-13 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 text-indigo-400 flex items-center justify-center shadow-md flex-shrink-0">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 text-indigo-400 flex items-center justify-center shadow-md flex-shrink-0">
                   <div className="grid grid-cols-2 gap-1.5 p-1">
-                    <X size={15} className="text-indigo-400 stroke-[3]" />
-                    <Circle size={15} className="text-purple-400 stroke-[3]" />
-                    <Circle size={15} className="text-purple-400 stroke-[3]" />
-                    <X size={15} className="text-indigo-400 stroke-[3]" />
+                    <X size={14} className="text-indigo-400 stroke-[3]" />
+                    <Circle size={14} className="text-purple-400 stroke-[3]" />
+                    <Circle size={14} className="text-purple-400 stroke-[3]" />
+                    <X size={14} className="text-indigo-400 stroke-[3]" />
                   </div>
                 </div>
-                <span className="text-xs font-semibold font-mono text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-3 py-1 rounded-md">
+                <span className="text-[11px] font-semibold font-mono text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-2.5 py-0.5 rounded-md">
                   3×3 to 6×6
                 </span>
               </div>
 
-              <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight group-hover:text-indigo-300 transition-colors">
+              <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight group-hover:text-indigo-300 transition-colors">
                 Tic-Tac-Toe Arena
               </h2>
-              <p className="text-white/60 text-xs sm:text-sm mt-3 leading-relaxed font-normal">
-                Strategic turn-based tactical battles on classic 3×3 or expanded boards with endless 3-mark mechanics.
+              <p className="text-white/60 text-xs sm:text-xs mt-2.5 leading-relaxed font-normal">
+                Strategic turn-based tactical battles on classic 3×3 or expanded boards with win streaks.
               </p>
             </div>
 
-            <div className="mt-8 pt-5 border-t border-white/10">
+            <div className="mt-6 pt-4 border-t border-white/10">
               <button
                 onClick={() => setActiveModal("create-tictactoe")}
-                className="btn-game-primary w-full !min-h-[3.25rem] !text-sm"
+                className="btn-game-primary w-full !min-h-[3rem] !text-xs font-bold"
               >
-                <Gamepad2 size={18} /> Create Tic Tac Toe
+                <Gamepad2 size={16} /> Create Tic Tac Toe
               </button>
             </div>
           </div>
 
           {/* Card 2: Rock Paper Scissors Duo */}
-          <div className="game-panel p-7 sm:p-8 flex flex-col justify-between border border-white/10 hover:border-amber-500/40 hover:bg-[#14122b]/95 transition-all duration-300 group">
+          <div className="game-panel p-6 sm:p-7 flex flex-col justify-between border border-white/10 hover:border-amber-500/40 hover:bg-[#14122b]/95 transition-all duration-300 group">
             <div>
               {/* Card Header & Custom Vector Icon */}
               <div className="flex items-center justify-between mb-6">
-                <div className="w-13 h-13 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30 text-amber-400 flex items-center justify-center shadow-md flex-shrink-0">
-                  <Swords size={24} className="text-amber-400 stroke-[2.2]" />
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30 text-amber-400 flex items-center justify-center shadow-md flex-shrink-0">
+                  <Swords size={22} className="text-amber-400 stroke-[2.2]" />
                 </div>
-                <span className="text-xs font-semibold font-mono text-amber-300 bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-md">
-                  2-Player Showdown
+                <span className="text-[11px] font-semibold font-mono text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 rounded-md">
+                  Showdown
                 </span>
               </div>
 
-              <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight group-hover:text-amber-300 transition-colors">
-                Rock Paper Scissors Duo
+              <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight group-hover:text-amber-300 transition-colors">
+                Rock Paper Scissors
               </h2>
-              <p className="text-white/60 text-xs sm:text-sm mt-3 leading-relaxed font-normal">
+              <p className="text-white/60 text-xs sm:text-xs mt-2.5 leading-relaxed font-normal">
                 Simultaneous secret choice locking, instant round reveals, score tracking, and live reactions.
               </p>
             </div>
 
-            <div className="mt-8 pt-5 border-t border-white/10">
+            <div className="mt-6 pt-4 border-t border-white/10">
               <button
                 onClick={() => setActiveModal("create-rps")}
-                className="btn-game-primary btn-game-amber w-full !min-h-[3.25rem] !text-sm"
+                className="btn-game-primary btn-game-amber w-full !min-h-[3rem] !text-xs font-bold"
               >
-                <Flame size={18} /> Create RPS Room
+                <Flame size={16} /> Create RPS Room
               </button>
             </div>
           </div>
 
           {/* Card 3: King & Queen Grid Battle */}
-          <div className="game-panel p-7 sm:p-8 flex flex-col justify-between border border-white/10 hover:border-amber-400/40 hover:bg-[#19152b]/95 transition-all duration-300 group">
+          <div className="game-panel p-6 sm:p-7 flex flex-col justify-between border border-white/10 hover:border-amber-400/40 hover:bg-[#19152b]/95 transition-all duration-300 group">
             <div>
               {/* Card Header & Custom Vector Icon */}
               <div className="flex items-center justify-between mb-6">
-                <div className="w-13 h-13 rounded-xl bg-gradient-to-br from-amber-400/20 to-yellow-500/20 border border-amber-400/30 text-amber-300 flex items-center justify-center shadow-md flex-shrink-0 text-2xl">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400/20 to-yellow-500/20 border border-amber-400/30 text-amber-300 flex items-center justify-center shadow-md flex-shrink-0 text-xl">
                   👑
                 </div>
-                <span className="text-xs font-semibold font-mono text-amber-300 bg-amber-400/10 border border-amber-400/20 px-3 py-1 rounded-md">
-                  8×8 Grid Strategy
+                <span className="text-[11px] font-semibold font-mono text-amber-300 bg-amber-400/10 border border-amber-400/20 px-2.5 py-0.5 rounded-md">
+                  8×8 Strategy
                 </span>
               </div>
 
-              <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight group-hover:text-amber-300 transition-colors">
-                King & Queen Grid Battle
+              <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight group-hover:text-amber-300 transition-colors">
+                King & Queen Battle
               </h2>
-              <p className="text-white/60 text-xs sm:text-sm mt-3 leading-relaxed font-normal">
-                Secret character placement on an 8×8 grid. Capture King, Queen & Soldiers for points + bonus turns to reach 200 pts!
+              <p className="text-white/60 text-xs sm:text-xs mt-2.5 leading-relaxed font-normal">
+                Secret character placement on an 8×8 grid. Capture King, Queen & Soldiers for points + bonus turns!
               </p>
             </div>
 
-            <div className="mt-8 pt-5 border-t border-white/10">
+            <div className="mt-6 pt-4 border-t border-white/10">
               <button
                 onClick={() => setActiveModal("create-kqbattle")}
-                className="btn-game-primary btn-game-amber w-full !min-h-[3.25rem] !text-sm"
+                className="btn-game-primary btn-game-amber w-full !min-h-[3rem] !text-xs font-bold"
               >
-                <Crown size={18} /> Create King & Queen Room
+                <Crown size={16} /> Create King & Queen
+              </button>
+            </div>
+          </div>
+
+          {/* Card 4: Tricky Triangles */}
+          <div className="game-panel p-6 sm:p-7 flex flex-col justify-between border border-white/10 hover:border-cyan-500/40 hover:bg-[#0c162b]/95 transition-all duration-300 group">
+            <div>
+              {/* Card Header & Custom Vector Icon */}
+              <div className="flex items-center justify-between mb-6">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 text-cyan-400 flex items-center justify-center shadow-md flex-shrink-0 text-xl">
+                  🔺
+                </div>
+                <span className="text-[11px] font-semibold font-mono text-cyan-300 bg-cyan-500/10 border border-cyan-500/20 px-2.5 py-0.5 rounded-md">
+                  Dots & Lines
+                </span>
+              </div>
+
+              <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight group-hover:text-cyan-300 transition-colors">
+                Tricky Triangles
+              </h2>
+              <p className="text-white/60 text-xs sm:text-xs mt-2.5 leading-relaxed font-normal">
+                Connect dots on a triangular lattice grid. Complete 3-sided triangles to claim points + extra turns!
+              </p>
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-white/10">
+              <button
+                onClick={() => setActiveModal("create-triangles")}
+                className="btn-game-primary w-full !min-h-[3rem] !text-xs font-bold bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 shadow-md shadow-cyan-500/20"
+              >
+                <Triangle size={16} /> Create Triangles Room
               </button>
             </div>
           </div>
@@ -848,6 +992,9 @@ export default function HomePage() {
         )}
         {activeModal === "create-kqbattle" && (
           <CreateKQBattleModal onClose={() => setActiveModal(null)} />
+        )}
+        {activeModal === "create-triangles" && (
+          <CreateTrianglesModal onClose={() => setActiveModal(null)} />
         )}
         {activeModal === "join" && (
           <JoinGameModal onClose={() => setActiveModal(null)} />
